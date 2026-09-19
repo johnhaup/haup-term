@@ -23,8 +23,6 @@ source ~/.zshrc    # or ~/.bashrc
 
 **CLI tools** (all platforms): fzf, zoxide, yazi, lazygit, fd, bat, eza, starship, fnm, bun
 
-**macOS only**: Ghostty, Raycast, Ice, Oh My Zsh, rbenv
-
 ## Supported Platforms
 
 - **macOS** — Homebrew

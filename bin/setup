@@ -193,52 +193,6 @@ fi
 echo ""
 
 # ============================================================
-# rbenv (macOS only — Ruby version manager)
-# ============================================================
-
-if [[ "$OS" == "Darwin" ]]; then
-  info "Installing rbenv..."
-  if ! check rbenv; then
-    brew install rbenv
-  fi
-  echo ""
-fi
-
-# ============================================================
-# macOS-only: Cask apps + Oh My Zsh
-# ============================================================
-
-if [[ "$OS" == "Darwin" ]]; then
-  declare -A cask_apps=(
-    [ghostty]="Ghostty"
-    [raycast]="Raycast"
-    [ice]="Ice"
-  )
-
-  info "Installing macOS apps..."
-  for cask in "${!cask_apps[@]}"; do
-    app_name="${cask_apps[$cask]}"
-    if [[ -d "/Applications/${app_name}.app" ]] || brew list --cask "$cask" &>/dev/null; then
-      ok "  ✓ $app_name already installed"
-    else
-      info "  Installing $app_name..."
-      brew install --cask "$cask"
-    fi
-  done
-
-  echo ""
-
-  info "Installing Oh My Zsh..."
-  if [[ -d "$HOME/.oh-my-zsh" ]]; then
-    ok "  ✓ Oh My Zsh already installed"
-  else
-    RUNZSH=no sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)"
-  fi
-
-  echo ""
-fi
-
-# ============================================================
 # Configure shell rc file
 # ============================================================
 
@@ -266,12 +220,6 @@ rc_add 'eval "$(zoxide init '"$SHELL_NAME"')"'
 # fnm
 rc_add '# fnm (Node version manager)'
 rc_add 'eval "$(fnm env --use-on-cd --shell '"$SHELL_NAME"')"'
-
-# rbenv (macOS only)
-if [[ "$OS" == "Darwin" ]]; then
-  rc_add '# rbenv'
-  rc_add 'eval "$(rbenv init - '"$SHELL_NAME"')"'
-fi
 
 # Starship (should be last)
 rc_add 'eval "$(starship init '"$SHELL_NAME"')"'
