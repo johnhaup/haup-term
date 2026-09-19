@@ -1,0 +1,160 @@
+#!/bin/bash
+# Quick-reference cheatsheet for terminal tools.
+# Usage: term [tool]   — show cheatsheet for a specific tool
+#        term           — show everything
+
+CYAN='\033[0;36m'
+YELLOW='\033[1;33m'
+GREEN='\033[0;32m'
+DIM='\033[2m'
+BOLD='\033[1m'
+NC='\033[0m'
+
+header() { echo -e "\n${CYAN}${BOLD}━━━ $1 ━━━${NC}"; }
+cmd()    { printf "  ${GREEN}%-28s${NC} %s\n" "$1" "$2"; }
+key()    { printf "  ${YELLOW}%-28s${NC} %s\n" "$1" "$2"; }
+
+show_fzf() {
+  header "fzf — fuzzy finder"
+  key "Ctrl+R" "Fuzzy search command history"
+  key "Ctrl+T" "Fuzzy find files (insert path)"
+  key "Alt+C" "Fuzzy cd into a directory"
+  cmd "cmd | fzf" "Pipe anything into fuzzy filter"
+  cmd "fzf --preview 'bat {}'" "Fuzzy find with file preview"
+}
+
+show_zoxide() {
+  header "zoxide — smart cd"
+  cmd "z <partial>" "Jump to best-match directory"
+  cmd "z foo bar" "Match dir containing foo AND bar"
+  cmd "zi" "Interactive selection with fzf"
+  cmd "z -" "Go back to previous directory"
+}
+
+show_yazi() {
+  header "yazi — terminal file manager"
+  cmd "yazi" "Open file manager in current dir"
+  cmd "yazi <path>" "Open file manager at path"
+  echo -e "\n  ${DIM}Inside yazi:${NC}"
+  key "h / l" "Go up / enter directory"
+  key "j / k" "Move down / up"
+  key "Enter" "Open file"
+  key "Space" "Select file"
+  key "d" "Delete selected"
+  key "r" "Rename"
+  key "c / x / p" "Copy / cut / paste"
+  key "/" "Search"
+  key "q" "Quit"
+}
+
+show_lazygit() {
+  header "lazygit — terminal git UI"
+  cmd "lazygit" "Open lazygit in current repo"
+  cmd "lg" "Alias (if configured)"
+  echo -e "\n  ${DIM}Inside lazygit:${NC}"
+  key "1-5" "Switch panels (status/files/branches/commits/stash)"
+  key "Space" "Stage / unstage file"
+  key "a" "Stage all"
+  key "c" "Commit"
+  key "p / P" "Pull / push"
+  key "Enter" "View details / expand"
+  key "d" "Discard changes (on file)"
+  key "b" "Checkout branch"
+  key "n" "New branch"
+  key "?" "Help"
+  key "q" "Quit"
+}
+
+show_bat() {
+  header "bat — cat with syntax highlighting"
+  cmd "bat <file>" "View file with syntax highlighting"
+  cmd "bat -l json <file>" "Force language highlighting"
+  cmd "bat --diff <file>" "Show git diff inline"
+}
+
+show_fd() {
+  header "fd — fast find"
+  cmd "fd <pattern>" "Find files matching pattern"
+  cmd "fd -e ts" "Find all .ts files"
+  cmd "fd -t d <name>" "Find directories only"
+  cmd "fd -H <pattern>" "Include hidden files"
+}
+
+show_eza() {
+  header "eza — modern ls"
+  cmd "eza" "List files (like ls)"
+  cmd "eza -la" "Long listing with hidden files"
+  cmd "eza --tree" "Tree view"
+  cmd "eza --tree -L 2" "Tree view, 2 levels deep"
+  cmd "eza --git" "Show git status for each file"
+}
+
+show_posting() {
+  header "posting — terminal API client"
+  cmd "posting" "Open posting TUI"
+  echo -e "\n  ${DIM}Inside posting:${NC}"
+  key "Ctrl+L" "Jump to URL bar"
+  key "Ctrl+T" "Select HTTP method"
+  key "Ctrl+J" "Send request"
+  key "Ctrl+S" "Save request"
+  key "Ctrl+O" "Jump mode (quick navigation)"
+  key "Ctrl+P" "Command palette"
+  key "F1" "View widget shortcuts"
+}
+
+show_summary() {
+  echo -e "${BOLD}Terminal Toolkit${NC}\n"
+  printf "  ${CYAN}%-12s${NC} %-10s  %s\n" "TOOL" "STATUS" "DESCRIPTION"
+  printf "  ${DIM}%-12s %-10s  %s${NC}\n" "────────────" "──────────" "──────────────────────────────────────"
+  local tools=(
+    "fzf:Fuzzy finder for files, history, and anything piped in"
+    "zoxide:Smart cd that learns your most-used directories"
+    "yazi:Terminal file manager with vim-style navigation"
+    "lazygit:Terminal UI for git (stage, commit, push, branch)"
+    "bat:Cat replacement with syntax highlighting and git diffs"
+    "fd:Fast, user-friendly alternative to find"
+    "eza:Modern ls with tree view, git status, and icons"
+    "posting:Keyboard-driven API client for testing HTTP requests"
+  )
+  for entry in "${tools[@]}"; do
+    local name="${entry%%:*}"
+    local desc="${entry#*:}"
+    if command -v "$name" &>/dev/null; then
+      printf "  ${GREEN}%-12s${NC} ${GREEN}%-10s${NC}  %s\n" "$name" "installed" "$desc"
+    else
+      printf "  ${YELLOW}%-12s${NC} ${YELLOW}%-10s${NC}  %s\n" "$name" "missing" "$desc"
+    fi
+  done
+  echo ""
+}
+
+show_all() {
+  echo -e "${BOLD}Terminal Cheatsheet${NC}"
+  show_fzf
+  show_zoxide
+  show_yazi
+  show_lazygit
+  show_bat
+  show_fd
+  show_eza
+  show_posting
+  echo ""
+}
+
+case "${1:-}" in
+  summary|s) show_summary ;;
+  fzf)     show_fzf ;;
+  zoxide|z) show_zoxide ;;
+  yazi|y)  show_yazi ;;
+  lazygit|lg) show_lazygit ;;
+  bat)     show_bat ;;
+  fd)      show_fd ;;
+  eza)     show_eza ;;
+  posting) show_posting ;;
+  "")      show_all ;;
+  *)
+    echo -e "${YELLOW}Unknown tool: $1${NC}"
+    echo "Available: summary, fzf, zoxide, yazi, lazygit, bat, fd, eza, posting"
+    exit 1
+    ;;
+esac
