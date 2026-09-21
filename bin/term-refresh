@@ -5,6 +5,13 @@
 
 set -euo pipefail
 
+# --- Pull latest changes ---
+REPO_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+if [[ -d "$REPO_DIR/.git" ]]; then
+  echo "Pulling latest haup-term..."
+  git -C "$REPO_DIR" pull --ff-only 2>/dev/null && echo "" || echo "  (could not pull — offline or uncommitted changes)"
+fi
+
 # Colors
 RED='\033[0;31m'
 GREEN='\033[0;32m'
