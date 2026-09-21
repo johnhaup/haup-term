@@ -1,0 +1,27 @@
+[init]
+	defaultBranch = main
+
+[pull]
+	rebase = true
+
+[push]
+	autoSetupRemote = true
+
+[rerere]
+	enabled = true
+
+[alias]
+	s = status
+	co = checkout
+	cb = checkout -b
+	cm = commit -m
+	ca = commit --amend
+	lg = log --oneline --graph --decorate -20
+	la = log --oneline --graph --decorate --all -20
+	d = diff
+	ds = diff --staged
+	unstage = reset HEAD --
+	last = log -1 HEAD
+
+[core]
+	editor = vim

@@ -232,6 +232,65 @@ if [[ "$OS" == "Darwin" ]]; then
 fi
 
 # ============================================================
+# Symlink config files
+# ============================================================
+
+SCRIPT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+CONFIG_DIR="$SCRIPT_DIR/config"
+
+link_config() {
+  local src="$1"
+  local dest="$2"
+
+  if [[ -L "$dest" ]]; then
+    ok "  ✓ $dest already linked"
+    return
+  fi
+
+  mkdir -p "$(dirname "$dest")"
+
+  if [[ -f "$dest" ]]; then
+    cp "$dest" "$dest.backup.$(date +%s)"
+    warn "  Backed up existing $dest"
+  fi
+
+  ln -sf "$src" "$dest"
+  info "  Linked $dest"
+}
+
+info "Linking config files..."
+
+# Starship
+link_config "$CONFIG_DIR/starship.toml" "$HOME/.config/starship.toml"
+
+# Lazygit (config path differs by OS)
+if [[ "$OS" == "Darwin" ]]; then
+  link_config "$CONFIG_DIR/lazygit.yml" "$HOME/Library/Application Support/lazygit/config.yml"
+else
+  link_config "$CONFIG_DIR/lazygit.yml" "$HOME/.config/lazygit/config.yml"
+fi
+
+# Git — merge our config as an include so user.name/email are preserved
+if ! git config --global --get include.path | grep -qF "$CONFIG_DIR/gitconfig" 2>/dev/null; then
+  git config --global --add include.path "$CONFIG_DIR/gitconfig"
+  info "  Added gitconfig as git include"
+else
+  ok "  ✓ gitconfig already included"
+fi
+
+# Prompt for git user if not set
+if [[ -z "$(git config --global user.name 2>/dev/null)" ]]; then
+  read -rp "  Git user.name: " git_name
+  git config --global user.name "$git_name"
+fi
+if [[ -z "$(git config --global user.email 2>/dev/null)" ]]; then
+  read -rp "  Git user.email: " git_email
+  git config --global user.email "$git_email"
+fi
+
+echo ""
+
+# ============================================================
 # Configure shell rc file
 # ============================================================
 
