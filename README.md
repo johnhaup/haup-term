@@ -11,6 +11,14 @@ Cross-platform terminal setup for macOS and Linux.
 
 ## Quick Start
 
+Fresh machine? One command does everything:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/johnhaup/haup-term/main/bootstrap.sh | bash
+```
+
+Or step by step:
+
 ```bash
 git clone https://github.com/johnhaup/haup-term.git ~/Projects/haup-term
 cd ~/Projects/haup-term
