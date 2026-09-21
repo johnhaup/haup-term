@@ -173,20 +173,13 @@ side_by_side() {
 }
 
 show_all() {
-  local term_width
-  term_width="${COLUMNS:-0}"
-  if [[ $term_width -lt 10 ]]; then
-    term_width=$(tput cols 2>/dev/null || echo 80)
-  fi
-  if [[ $term_width -lt 10 ]]; then
-    term_width=$(stty size 2>/dev/null | awk '{print $2}' || echo 80)
-  fi
-  local min_wide=120
+  local tw
+  tw=$(tput cols 2>/dev/null || echo 80)
 
   echo -e "${BOLD}Terminal Cheatsheet${NC}"
 
-  if [[ $term_width -ge $min_wide ]]; then
-    local col_width=$(( (term_width - 6) / 2 ))
+  if [[ $tw -ge 120 ]]; then
+    local col_width=$(( (tw - 6) / 2 ))
 
     # Capture each tool's output
     local out_fzf out_zoxide out_yazi out_lazygit out_bat out_fd out_eza out_posting out_htop
