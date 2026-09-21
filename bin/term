@@ -3,6 +3,8 @@
 # Usage: term [tool]   — show cheatsheet for a specific tool
 #        term           — show everything
 
+TERM_WIDTH=$(tput cols 2>/dev/null || echo 80)
+
 CYAN='\033[0;36m'
 YELLOW='\033[1;33m'
 GREEN='\033[0;32m'
@@ -173,13 +175,10 @@ side_by_side() {
 }
 
 show_all() {
-  local tw
-  tw=$(tput cols 2>/dev/null || echo 80)
-
   echo -e "${BOLD}Terminal Cheatsheet${NC}"
 
-  if [[ $tw -ge 120 ]]; then
-    local col_width=$(( (tw - 6) / 2 ))
+  if [[ $TERM_WIDTH -ge 120 ]]; then
+    local col_width=$(( (TERM_WIDTH - 6) / 2 ))
 
     # Capture each tool's output
     local out_fzf out_zoxide out_yazi out_lazygit out_bat out_fd out_eza out_posting out_htop
