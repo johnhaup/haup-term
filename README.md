@@ -46,11 +46,14 @@ term-refresh         # installs tools and configures your shell
 | [bat](https://github.com/sharkdp/bat) | `cat` with syntax highlighting and git diffs |
 | [eza](https://github.com/eza-community/eza) | Modern `ls` with tree view, git status, and icons |
 | [htop](https://htop.dev) | Interactive process viewer |
+| [ripgrep](https://github.com/BurntSushi/ripgrep) | Blazing fast `grep` alternative |
+| [jq](https://github.com/jqlang/jq) | JSON processor for the command line |
 | [posting](https://github.com/darrenburns/posting) | Keyboard-driven TUI API client |
 | [starship](https://starship.rs) | Cross-shell prompt |
 | [fnm](https://github.com/Schniz/fnm) | Fast Node version manager |
 | [bun](https://bun.sh) | Fast JavaScript runtime and package manager |
 | [rbenv](https://github.com/rbenv/rbenv) | Ruby version manager (macOS only) |
+| [trash](https://github.com/ali-rantakari/trash) | Move files to Trash instead of `rm` (macOS only) |
 
 ## Supported Platforms
 

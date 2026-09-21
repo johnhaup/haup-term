@@ -137,6 +137,8 @@ pkg_install    "bat"      "bat"       "bat"           "bat"           "bat"
 pkg_install    "eza"      "eza"       "eza"           "eza"           "eza"
 pkg_install    "yazi"     "yazi"      "yazi"          "yazi"          "yazi"
 pkg_install    "htop"     "htop"      "htop"          "htop"          "htop"
+pkg_install    "rg"       "ripgrep"   "ripgrep"       "ripgrep"       "ripgrep"
+pkg_install    "jq"       "jq"        "jq"            "jq"            "jq"
 
 echo ""
 
@@ -213,13 +215,18 @@ fi
 echo ""
 
 # ============================================================
-# macOS-only: rbenv (Ruby version manager)
+# macOS-only: rbenv + trash
 # ============================================================
 
 if [[ "$OS" == "Darwin" ]]; then
-  info "Installing rbenv..."
+  info "Installing macOS-only tools..."
   if ! check rbenv; then
+    info "  Installing rbenv..."
     brew install rbenv
+  fi
+  if ! check trash; then
+    info "  Installing trash..."
+    brew install trash
   fi
   echo ""
 fi
