@@ -213,6 +213,18 @@ fi
 echo ""
 
 # ============================================================
+# macOS-only: rbenv (Ruby version manager)
+# ============================================================
+
+if [[ "$OS" == "Darwin" ]]; then
+  info "Installing rbenv..."
+  if ! check rbenv; then
+    brew install rbenv
+  fi
+  echo ""
+fi
+
+# ============================================================
 # Configure shell rc file
 # ============================================================
 
@@ -240,6 +252,12 @@ rc_add 'eval "$(zoxide init '"$SHELL_NAME"')"'
 # fnm
 rc_add '# fnm (Node version manager)'
 rc_add 'eval "$(fnm env --use-on-cd --shell '"$SHELL_NAME"')"'
+
+# rbenv (macOS only)
+if [[ "$OS" == "Darwin" ]]; then
+  rc_add '# rbenv'
+  rc_add 'eval "$(rbenv init - '"$SHELL_NAME"')"'
+fi
 
 # Starship (should be last)
 rc_add 'eval "$(starship init '"$SHELL_NAME"')"'

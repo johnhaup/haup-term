@@ -50,6 +50,7 @@ term-refresh         # installs tools and configures your shell
 | [starship](https://starship.rs) | Cross-shell prompt |
 | [fnm](https://github.com/Schniz/fnm) | Fast Node version manager |
 | [bun](https://bun.sh) | Fast JavaScript runtime and package manager |
+| [rbenv](https://github.com/rbenv/rbenv) | Ruby version manager (macOS only) |
 
 ## Supported Platforms
 
