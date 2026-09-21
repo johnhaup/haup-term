@@ -102,6 +102,22 @@ show_posting() {
   key "F1" "View widget shortcuts"
 }
 
+show_htop() {
+  header "htop — interactive process viewer"
+  cmd "htop" "Open process viewer"
+  echo -e "\n  ${DIM}Inside htop:${NC}"
+  key "F2" "Setup / config"
+  key "F3 / /" "Search process"
+  key "F4 / \\" "Filter processes"
+  key "F5" "Tree view toggle"
+  key "F6 / < >" "Sort by column"
+  key "F9 / k" "Kill process"
+  key "Space" "Tag process"
+  key "u" "Filter by user"
+  key "t" "Toggle tree/list view"
+  key "q" "Quit"
+}
+
 show_summary() {
   echo -e "${BOLD}Terminal Toolkit${NC}\n"
   printf "  ${CYAN}%-12s${NC} %-10s  %s\n" "TOOL" "STATUS" "DESCRIPTION"
@@ -114,6 +130,7 @@ show_summary() {
     "bat:Cat replacement with syntax highlighting and git diffs"
     "fd:Fast, user-friendly alternative to find"
     "eza:Modern ls with tree view, git status, and icons"
+    "htop:Interactive process viewer"
     "posting:Keyboard-driven API client for testing HTTP requests"
   )
   for entry in "${tools[@]}"; do
@@ -138,6 +155,7 @@ show_all() {
   show_fd
   show_eza
   show_posting
+  show_htop
   echo ""
 }
 
@@ -151,10 +169,11 @@ case "${1:-}" in
   fd)      show_fd ;;
   eza)     show_eza ;;
   posting) show_posting ;;
+  htop)    show_htop ;;
   "")      show_all ;;
   *)
     echo -e "${YELLOW}Unknown tool: $1${NC}"
-    echo "Available: summary, fzf, zoxide, yazi, lazygit, bat, fd, eza, posting"
+    echo "Available: summary, fzf, zoxide, yazi, lazygit, bat, fd, eza, posting, htop"
     exit 1
     ;;
 esac

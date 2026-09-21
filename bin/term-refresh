@@ -136,6 +136,26 @@ pkg_install    "fd"       "fd"        "fd-find"       "fd-find"       "fd"
 pkg_install    "bat"      "bat"       "bat"           "bat"           "bat"
 pkg_install    "eza"      "eza"       "eza"           "eza"           "eza"
 pkg_install    "yazi"     "yazi"      "yazi"          "yazi"          "yazi"
+pkg_install    "htop"     "htop"      "htop"          "htop"          "htop"
+
+echo ""
+
+# ============================================================
+# Posting (TUI API client)
+# ============================================================
+
+info "Installing Posting..."
+if ! check posting; then
+  if [[ "$PKG" == "brew" ]]; then
+    brew install posting
+  elif command -v pipx &>/dev/null; then
+    pipx install posting
+  elif command -v pip3 &>/dev/null; then
+    pip3 install --user posting
+  else
+    warn "  Skipping posting — install pipx or pip3 first"
+  fi
+fi
 
 echo ""
 
