@@ -174,7 +174,13 @@ side_by_side() {
 
 show_all() {
   local term_width
-  term_width="${COLUMNS:-$(tput cols 2>/dev/null || echo 80)}"
+  term_width="${COLUMNS:-0}"
+  if [[ $term_width -lt 10 ]]; then
+    term_width=$(tput cols 2>/dev/null || echo 80)
+  fi
+  if [[ $term_width -lt 10 ]]; then
+    term_width=$(stty size 2>/dev/null | awk '{print $2}' || echo 80)
+  fi
   local min_wide=120
 
   echo -e "${BOLD}Terminal Cheatsheet${NC}"
