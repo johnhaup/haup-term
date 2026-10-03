@@ -58,4 +58,4 @@ term-refresh         # installs tools and configures your shell
 ## Supported Platforms
 
 - **macOS** — Homebrew
-- **Linux** — apt (Debian/Ubuntu), dnf (Fedora), pacman (Arch)
+- **Linux** — Homebrew if installed (e.g. Bazzite/Fedora Atomic), otherwise apt (Debian/Ubuntu), dnf (Fedora), pacman (Arch)
