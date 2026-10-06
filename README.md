@@ -48,6 +48,8 @@ term-refresh         # installs tools and configures your shell
 | [htop](https://htop.dev) | Interactive process viewer |
 | [ripgrep](https://github.com/BurntSushi/ripgrep) | Blazing fast `grep` alternative |
 | [jq](https://github.com/jqlang/jq) | JSON processor for the command line |
+| [gh](https://cli.github.com) | GitHub CLI for PRs, issues, repos, and workflows |
+| [gh-dash](https://github.com/dlvhdr/gh-dash) | GitHub dashboard TUI (`gh` extension) |
 | [posting](https://github.com/darrenburns/posting) | Keyboard-driven TUI API client |
 | [starship](https://starship.rs) | Cross-shell prompt |
 | [fnm](https://github.com/Schniz/fnm) | Fast Node version manager |

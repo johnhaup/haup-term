@@ -102,6 +102,35 @@ show_posting() {
   key "F1" "View widget shortcuts"
 }
 
+show_gh() {
+  header "gh — GitHub CLI"
+  cmd "gh pr list" "List open pull requests"
+  cmd "gh pr create" "Create a pull request"
+  cmd "gh pr checkout <num>" "Check out a PR branch"
+  cmd "gh pr view" "View current PR details"
+  cmd "gh issue list" "List open issues"
+  cmd "gh issue create" "Create a new issue"
+  cmd "gh repo view --web" "Open repo in browser"
+  cmd "gh run list" "List recent workflow runs"
+  cmd "gh run watch" "Watch a running workflow"
+}
+
+show_gh_dash() {
+  header "gh dash — GitHub dashboard TUI"
+  cmd "gh dash" "Open the dashboard"
+  echo -e "\n  ${DIM}Inside gh dash:${NC}"
+  key "j / k" "Move down / up"
+  key "Enter" "View PR/issue details"
+  key "o" "Open in browser"
+  key "d" "Show diff"
+  key "c" "Show CI status"
+  key "s" "Search"
+  key "/ then 1-9" "Switch sections"
+  key "r" "Refresh"
+  key "?" "Help"
+  key "q" "Quit"
+}
+
 show_htop() {
   header "htop — interactive process viewer"
   cmd "htop" "Open process viewer"
@@ -132,10 +161,20 @@ show_summary() {
     "eza:Modern ls with tree view, git status, and icons"
     "htop:Interactive process viewer"
     "posting:Keyboard-driven API client for testing HTTP requests"
+    "gh:GitHub CLI for PRs, issues, repos, and workflows"
+    "gh-dash:GitHub dashboard TUI (gh extension)"
   )
   for entry in "${tools[@]}"; do
     local name="${entry%%:*}"
     local desc="${entry#*:}"
+    if [[ "$name" == "gh-dash" ]]; then
+      if gh extension list 2>/dev/null | grep -q "dlvhdr/gh-dash"; then
+        printf "  ${GREEN}%-12s${NC} ${GREEN}%-10s${NC}  %s\n" "$name" "installed" "$desc"
+      else
+        printf "  ${YELLOW}%-12s${NC} ${YELLOW}%-10s${NC}  %s\n" "$name" "missing" "$desc"
+      fi
+      continue
+    fi
     if command -v "$name" &>/dev/null; then
       printf "  ${GREEN}%-12s${NC} ${GREEN}%-10s${NC}  %s\n" "$name" "installed" "$desc"
     else
@@ -151,6 +190,8 @@ show_all() {
   show_zoxide
   show_yazi
   show_lazygit
+  show_gh
+  show_gh_dash
   show_bat
   show_fd
   show_eza
@@ -168,12 +209,14 @@ case "${1:-}" in
   bat)     show_bat ;;
   fd)      show_fd ;;
   eza)     show_eza ;;
+  gh)     show_gh ;;
+  gh-dash|dash) show_gh_dash ;;
   posting) show_posting ;;
   htop)    show_htop ;;
   "")      show_all ;;
   *)
     echo -e "${YELLOW}Unknown tool: $1${NC}"
-    echo "Available: summary, fzf, zoxide, yazi, lazygit, bat, fd, eza, posting, htop"
+    echo "Available: summary, fzf, zoxide, yazi, lazygit, gh, gh-dash, bat, fd, eza, posting, htop"
     exit 1
     ;;
 esac

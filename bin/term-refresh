@@ -162,6 +162,24 @@ pkg_install    "jq"       "jq"        "jq"            "jq"            "jq"
 echo ""
 
 # ============================================================
+# GitHub CLI + gh-dash
+# ============================================================
+
+info "Installing GitHub CLI..."
+pkg_install    "gh"       "gh"        "gh"            "gh"            "github-cli"
+
+if command -v gh &>/dev/null; then
+  if gh extension list 2>/dev/null | grep -q "dlvhdr/gh-dash"; then
+    ok "  ✓ gh-dash already installed"
+  else
+    info "  Installing gh-dash extension..."
+    gh extension install dlvhdr/gh-dash
+  fi
+fi
+
+echo ""
+
+# ============================================================
 # Posting (TUI API client)
 # ============================================================
 
