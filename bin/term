@@ -131,6 +131,18 @@ show_gh_dash() {
   key "q" "Quit"
 }
 
+show_gh_enhance() {
+  header "gh enhance — GitHub Actions monitor"
+  cmd "gh enhance" "Watch recent runs for current repo"
+  cmd "gh enhance <pr-number>" "Watch checks for a specific PR"
+  cmd "gh enhance <pr-url>" "Watch checks by PR URL"
+  cmd "gh enhance <run-url>" "Watch a specific Actions run"
+  cmd "gh enhance --flat" "Show checks as a flat list"
+  cmd "gh enhance -R owner/repo" "Watch runs for another repo"
+  echo -e "\n  ${DIM}Inside gh enhance:${NC}"
+  key "?" "Help"
+}
+
 show_htop() {
   header "htop — interactive process viewer"
   cmd "htop" "Open process viewer"
@@ -163,12 +175,14 @@ show_summary() {
     "posting:Keyboard-driven API client for testing HTTP requests"
     "gh:GitHub CLI for PRs, issues, repos, and workflows"
     "gh-dash:GitHub dashboard TUI (gh extension)"
+    "gh-enhance:GitHub Actions monitor (gh extension)"
   )
   for entry in "${tools[@]}"; do
     local name="${entry%%:*}"
     local desc="${entry#*:}"
-    if [[ "$name" == "gh-dash" ]]; then
-      if gh extension list 2>/dev/null | grep -q "dlvhdr/gh-dash"; then
+    if [[ "$name" == "gh-dash" || "$name" == "gh-enhance" ]]; then
+      local ext_slug="dlvhdr/${name}"
+      if gh extension list 2>/dev/null | grep -q "$ext_slug"; then
         printf "  ${GREEN}%-12s${NC} ${GREEN}%-10s${NC}  %s\n" "$name" "installed" "$desc"
       else
         printf "  ${YELLOW}%-12s${NC} ${YELLOW}%-10s${NC}  %s\n" "$name" "missing" "$desc"
@@ -192,6 +206,7 @@ show_all() {
   show_lazygit
   show_gh
   show_gh_dash
+  show_gh_enhance
   show_bat
   show_fd
   show_eza
@@ -211,12 +226,13 @@ case "${1:-}" in
   eza)     show_eza ;;
   gh)     show_gh ;;
   gh-dash|dash) show_gh_dash ;;
+  gh-enhance|enhance) show_gh_enhance ;;
   posting) show_posting ;;
   htop)    show_htop ;;
   "")      show_all ;;
   *)
     echo -e "${YELLOW}Unknown tool: $1${NC}"
-    echo "Available: summary, fzf, zoxide, yazi, lazygit, gh, gh-dash, bat, fd, eza, posting, htop"
+    echo "Available: summary, fzf, zoxide, yazi, lazygit, gh, gh-dash, gh-enhance, bat, fd, eza, posting, htop"
     exit 1
     ;;
 esac
