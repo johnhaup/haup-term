@@ -259,15 +259,55 @@ fi
 echo ""
 
 # ============================================================
-# macOS-only: rbenv + trash
+# WezTerm
+# ============================================================
+
+info "Installing WezTerm..."
+if [[ "$OS" == "Darwin" ]]; then
+  if [[ -d "/Applications/WezTerm.app" ]] || check wezterm; then
+    ok "  ✓ WezTerm already installed"
+  else
+    brew install --cask wezterm
+  fi
+elif command -v flatpak &>/dev/null && flatpak info org.wezfurlong.wezterm &>/dev/null; then
+  ok "  ✓ WezTerm already installed (flatpak)"
+elif ! check wezterm; then
+  # Flatpak first: works on every distro (incl. atomic ones) and adds a desktop entry
+  if command -v flatpak &>/dev/null; then
+    flatpak remote-add --user --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
+    flatpak install --user -y flathub org.wezfurlong.wezterm
+  else
+    case "$PKG" in
+      brew)
+        brew tap wez/wezterm-linuxbrew
+        brew install wezterm
+        ;;
+      apt)
+        curl -fsSL https://apt.fury.io/wez/gpg.key | sudo gpg --yes --dearmor -o /usr/share/keyrings/wezterm-fury.gpg
+        sudo chmod 644 /usr/share/keyrings/wezterm-fury.gpg
+        echo 'deb [signed-by=/usr/share/keyrings/wezterm-fury.gpg] https://apt.fury.io/wez/ * *' | sudo tee /etc/apt/sources.list.d/wezterm.list >/dev/null
+        sudo apt-get update -qq
+        sudo apt-get install -y wezterm
+        ;;
+      dnf)
+        sudo dnf copr enable -y wezfurlong/wezterm-nightly
+        sudo dnf install -y wezterm
+        ;;
+      pacman)
+        sudo pacman -S --noconfirm wezterm
+        ;;
+    esac
+  fi
+fi
+
+echo ""
+
+# ============================================================
+# macOS-only: trash
 # ============================================================
 
 if [[ "$OS" == "Darwin" ]]; then
   info "Installing macOS-only tools..."
-  if ! check rbenv; then
-    info "  Installing rbenv..."
-    brew install rbenv
-  fi
   if ! check trash; then
     info "  Installing trash..."
     brew install trash
@@ -313,6 +353,9 @@ if [[ "$OS" == "Darwin" ]]; then
 else
   link_config "$CONFIG_DIR/lazygit.yml" "$HOME/.config/lazygit/config.yml"
 fi
+
+# WezTerm (same path on macOS and Linux, incl. flatpak)
+link_config "$CONFIG_DIR/wezterm.lua" "$HOME/.config/wezterm/wezterm.lua"
 
 # Git — merge our config as an include so user.name/email are preserved
 if ! git config --global --get include.path | grep -qF "$CONFIG_DIR/gitconfig" 2>/dev/null; then
@@ -362,12 +405,6 @@ rc_add 'eval "$(zoxide init '"$SHELL_NAME"')"'
 # fnm
 rc_add '# fnm (Node version manager)'
 rc_add 'eval "$(fnm env --use-on-cd --shell '"$SHELL_NAME"')"'
-
-# rbenv (macOS only)
-if [[ "$OS" == "Darwin" ]]; then
-  rc_add '# rbenv'
-  rc_add 'eval "$(rbenv init - '"$SHELL_NAME"')"'
-fi
 
 # bun (its installer only writes to login-shell profiles on some systems)
 rc_add '# bun'
