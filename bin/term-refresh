@@ -303,6 +303,69 @@ fi
 echo ""
 
 # ============================================================
+# Handy (local speech-to-text dictation)
+# ============================================================
+
+info "Installing Handy..."
+if [[ "$OS" == "Darwin" ]]; then
+  if [[ -d "/Applications/Handy.app" ]]; then
+    ok "  ✓ Handy already installed"
+  else
+    brew install --cask handy
+  fi
+elif [[ -x "$HOME/.local/bin/handy" ]]; then
+  ok "  ✓ Handy already installed (AppImage)"
+elif ! check handy; then
+  # Not on Flathub, so install from the GitHub release assets
+  HANDY_VERSION="$(curl -fsSL https://api.github.com/repos/cjpais/Handy/releases/latest | grep -m1 '"tag_name"' | sed -E 's/.*"v([^"]+)".*/\1/')"
+  HANDY_URL="https://github.com/cjpais/Handy/releases/download/v$HANDY_VERSION"
+  ARCH="$(uname -m)"
+  case "$PKG" in
+    apt)
+      [[ "$ARCH" == "x86_64" ]] && DEB_ARCH="amd64" || DEB_ARCH="arm64"
+      HANDY_DEB="$(mktemp --suffix=.deb)"
+      curl -fsSL -o "$HANDY_DEB" "$HANDY_URL/Handy_${HANDY_VERSION}_${DEB_ARCH}.deb"
+      chmod 644 "$HANDY_DEB"
+      sudo apt-get install -y "$HANDY_DEB"
+      rm -f "$HANDY_DEB"
+      ;;
+    dnf)
+      sudo dnf install -y "$HANDY_URL/Handy-${HANDY_VERSION}-1.${ARCH}.rpm"
+      ;;
+    *)
+      # brew (atomic distros, where dnf can't install) and pacman: AppImage + desktop entry
+      [[ "$ARCH" == "x86_64" ]] && APPIMAGE_ARCH="amd64" || APPIMAGE_ARCH="aarch64"
+      mkdir -p "$HOME/.local/bin" "$HOME/.local/share/applications"
+      curl -fsSL -o "$HOME/.local/bin/handy" "$HANDY_URL/Handy_${HANDY_VERSION}_${APPIMAGE_ARCH}.AppImage"
+      chmod +x "$HOME/.local/bin/handy"
+      cat > "$HOME/.local/share/applications/handy.desktop" <<EOF
+[Desktop Entry]
+Name=Handy
+Comment=Speech to text
+Exec=$HOME/.local/bin/handy
+Type=Application
+Categories=Utility;
+EOF
+      ;;
+  esac
+fi
+
+# Handy needs a text input tool on Linux to type into other apps
+if [[ "$OS" == "Linux" ]]; then
+  [[ "${XDG_SESSION_TYPE:-}" == "wayland" ]] && TYPE_TOOL="wtype" || TYPE_TOOL="xdotool"
+  if ! check "$TYPE_TOOL"; then
+    case "$PKG" in
+      apt)    sudo apt-get install -y "$TYPE_TOOL" ;;
+      dnf)    sudo dnf install -y "$TYPE_TOOL" ;;
+      pacman) sudo pacman -S --noconfirm "$TYPE_TOOL" gtk-layer-shell ;;
+      *)      warn "  Install $TYPE_TOOL with your system package manager so Handy can type text" ;;
+    esac
+  fi
+fi
+
+echo ""
+
+# ============================================================
 # macOS-only: trash
 # ============================================================
 

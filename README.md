@@ -56,6 +56,7 @@ term-refresh         # installs tools and configures your shell
 | [fnm](https://github.com/Schniz/fnm) | Fast Node version manager |
 | [bun](https://bun.sh) | Fast JavaScript runtime and package manager |
 | [WezTerm](https://wezfurlong.org/wezterm/) | GPU-accelerated terminal (config linked to `~/.config/wezterm/wezterm.lua`) |
+| [Handy](https://handy.computer) | Offline speech-to-text dictation, pastes into any app (plus `wtype`/`xdotool` on Linux) |
 | [trash](https://github.com/ali-rantakari/trash) | Move files to Trash instead of `rm` (macOS only) |
 
 ## Supported Platforms
