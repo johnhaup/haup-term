@@ -1,0 +1,6 @@
+{
+  "name": "haup",
+  "version": "0.1.0",
+  "description": "Skills for any repo: verify UI changes by looking, run the project's checks before calling work done, scaffold CLAUDE.md in a new repo.",
+  "author": { "name": "johnhaup" }
+}

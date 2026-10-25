@@ -421,6 +421,28 @@ fi
 # WezTerm (same path on macOS and Linux, incl. flatpak)
 link_config "$CONFIG_DIR/wezterm.lua" "$HOME/.config/wezterm/wezterm.lua"
 
+# Claude Code — global rules plus the haup plugin from this repo's marketplace
+if command -v claude &>/dev/null; then
+  link_config "$CONFIG_DIR/claude/CLAUDE.md" "$HOME/.claude/CLAUDE.md"
+  for rule in "$SCRIPT_DIR/plugins/haup/rules/"*.md; do
+    link_config "$rule" "$HOME/.claude/rules/$(basename "$rule")"
+  done
+
+  if claude plugin marketplace list 2>/dev/null | grep -q "haup-term"; then
+    claude plugin marketplace update haup-term >/dev/null 2>&1 || warn "  Could not update the haup-term marketplace"
+  else
+    claude plugin marketplace add "$SCRIPT_DIR" >/dev/null 2>&1 || warn "  Could not add the haup-term marketplace"
+  fi
+
+  if claude plugin list 2>/dev/null | grep -q "haup@haup-term"; then
+    ok "  ✓ Claude plugin haup installed"
+  elif claude plugin install "haup@haup-term" >/dev/null 2>&1; then
+    info "  Installed Claude plugin haup"
+  else
+    warn "  Could not install Claude plugin haup"
+  fi
+fi
+
 # Git — merge our config as an include so user.name/email are preserved
 if ! git config --global --get include.path | grep -qF "$CONFIG_DIR/gitconfig" 2>/dev/null; then
   git config --global --add include.path "$CONFIG_DIR/gitconfig"

@@ -1,0 +1,14 @@
+{
+  "name": "haup-term",
+  "owner": {
+    "name": "johnhaup"
+  },
+  "description": "Claude Code skills and standards for any repo.",
+  "plugins": [
+    {
+      "name": "haup",
+      "source": "./plugins/haup",
+      "description": "Skills for any repo: verify UI changes by looking, run the project's checks before calling work done, scaffold CLAUDE.md in a new repo."
+    }
+  ]
+}

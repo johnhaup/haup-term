@@ -61,6 +61,25 @@ term-refresh         # installs tools and configures your shell
 | [Handy](https://handy.computer) | Offline speech-to-text dictation, pastes into any app (plus `wtype`/`xdotool` on Linux) |
 | [trash](https://github.com/ali-rantakari/trash) | Move files to Trash instead of `rm` (macOS only) |
 
+## Claude Code
+
+`term-refresh` links `config/claude/CLAUDE.md` to `~/.claude/CLAUDE.md`, links each file in `plugins/haup/rules/` into `~/.claude/rules/`, and installs the `haup` plugin from this repo's marketplace. Skills are read straight from this folder, so edits apply on the next session.
+
+| Skill | What it does |
+|---|---|
+| `done-check` | Runs the project's own type check, lint and tests and reports results before work is called done |
+| `verify-ui` | Builds and looks at a UI change on a dedicated simulator, emulator or browser |
+| `init-repo` | Writes a short CLAUDE.md for a repo that has none |
+
+Rules: `git.md` always loads; `react-native.md` and `expo.md` load only when Claude works on matching files.
+
+Without the rest of haup-term:
+
+```bash
+claude plugin marketplace add johnhaup/haup-term
+claude plugin install haup@haup-term
+```
+
 ## Supported Platforms
 
 - **macOS** — Homebrew
