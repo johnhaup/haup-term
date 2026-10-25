@@ -21,6 +21,11 @@ if printf '%s\n' "$changed" | grep -qx "$DOC"; then
   exit 0
 fi
 
+# Updating the doc and committing it in the same turn leaves it clean in the tree.
+if [ -n "$(git log -1 --since='1 hour ago' --format=%h -- "$DOC" 2>/dev/null)" ]; then
+  exit 0
+fi
+
 code_changes=$(printf '%s\n' "$changed" | grep -vx "$DOC" || true)
 if [ -z "$code_changes" ]; then
   exit 0
