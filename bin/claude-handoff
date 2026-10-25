@@ -1,0 +1,72 @@
+#!/bin/bash
+# Installs the Claude Code handoff kit into a project: a running context doc that every
+# session loads, an archive for pruned entries, and a Stop hook that refuses to end a turn
+# that changed code without updating the doc.
+#
+# Usage: claude-handoff [project-dir]   (defaults to the current directory)
+# Idempotent: the hook script is always synced from haup-term; docs and the CLAUDE.md
+# section are only created when missing.
+
+set -euo pipefail
+
+GREEN='\033[0;32m'; YELLOW='\033[1;33m'; DIM='\033[2m'; NC='\033[0m'
+ok()   { echo -e "  ${GREEN}✓${NC} $1"; }
+skip() { echo -e "  ${DIM}·${NC} $1"; }
+warn() { echo -e "  ${YELLOW}!${NC} $1"; }
+
+KIT_DIR="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/../config/claude-handoff" && pwd)"
+PROJECT="$(cd "${1:-.}" && pwd)"
+
+command -v jq >/dev/null || { echo "jq is required (run term-refresh)"; exit 1; }
+[[ -d "$PROJECT/.git" ]] || warn "$PROJECT is not a git repo; the hook relies on git status"
+
+echo "Installing Claude handoff kit into $PROJECT"
+
+# 1. Hook script (always synced)
+mkdir -p "$PROJECT/.claude/hooks"
+if cmp -s "$KIT_DIR/check-agent-context.sh" "$PROJECT/.claude/hooks/check-agent-context.sh" 2>/dev/null; then
+  skip ".claude/hooks/check-agent-context.sh up to date"
+else
+  cp "$KIT_DIR/check-agent-context.sh" "$PROJECT/.claude/hooks/check-agent-context.sh"
+  ok ".claude/hooks/check-agent-context.sh"
+fi
+chmod +x "$PROJECT/.claude/hooks/check-agent-context.sh"
+
+# 2. Stop hook in project settings (merged, never replaces other hooks)
+SETTINGS="$PROJECT/.claude/settings.json"
+HOOK_CMD="bash .claude/hooks/check-agent-context.sh"
+[[ -f "$SETTINGS" ]] || echo '{}' > "$SETTINGS"
+if jq -e --arg cmd "$HOOK_CMD" '[.hooks.Stop[]?.hooks[]? | select(.command == $cmd)] | length > 0' "$SETTINGS" >/dev/null; then
+  skip ".claude/settings.json already has the Stop hook"
+else
+  tmp="$(mktemp)"
+  jq --arg cmd "$HOOK_CMD" '.hooks.Stop = ((.hooks.Stop // []) + [{
+    hooks: [{ type: "command", command: $cmd, timeout: 15, statusMessage: "Checking docs/AGENT_CONTEXT.md" }]
+  }])' "$SETTINGS" > "$tmp" && mv "$tmp" "$SETTINGS"
+  ok ".claude/settings.json Stop hook added"
+fi
+
+# 3. Docs (never overwritten)
+mkdir -p "$PROJECT/docs"
+for doc in AGENT_CONTEXT.md AGENT_CONTEXT_ARCHIVE.md; do
+  if [[ -f "$PROJECT/docs/$doc" ]]; then
+    skip "docs/$doc exists"
+  else
+    cp "$KIT_DIR/$doc" "$PROJECT/docs/$doc"
+    ok "docs/$doc (template; fill in Current state)"
+  fi
+done
+
+# 4. CLAUDE.md section (appended once, keyed on the heading)
+CLAUDE_MD="$PROJECT/CLAUDE.md"
+if [[ -f "$CLAUDE_MD" ]] && grep -q '^## Agent context document' "$CLAUDE_MD"; then
+  skip "CLAUDE.md already has the Agent context section"
+else
+  [[ -f "$CLAUDE_MD" ]] || printf '# %s — Claude Guidelines\n' "$(basename "$PROJECT")" > "$CLAUDE_MD"
+  cat "$KIT_DIR/CLAUDE.md.snippet" >> "$CLAUDE_MD"
+  ok "CLAUDE.md section appended"
+fi
+
+echo
+echo "Next: fill in docs/AGENT_CONTEXT.md, commit the files, and open /hooks once in any"
+echo "running Claude session (or restart it) so the Stop hook goes live."

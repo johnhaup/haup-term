@@ -1,0 +1,12 @@
+
+## Agent context document
+
+@docs/AGENT_CONTEXT.md
+
+`docs/AGENT_CONTEXT.md` is the running handoff for this repo. Read it before starting work
+(it is imported above). Before ending any turn that changed code, update it: current state,
+a dated entry under Recent work, any lesson or pitfall worth not repeating, and Open
+follow-ups. A Stop hook (`.claude/hooks/check-agent-context.sh`) blocks the turn until the
+file is touched. Keep it under ~150 lines: move old Recent work entries verbatim to
+`docs/AGENT_CONTEXT_ARCHIVE.md` (not loaded, grep on demand) and never prune lessons for
+length. Commit it together with the code it describes.
