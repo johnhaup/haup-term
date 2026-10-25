@@ -158,6 +158,7 @@ pkg_install    "yazi"     "yazi"      "yazi"          "yazi"          "yazi"
 pkg_install    "htop"     "htop"      "htop"          "htop"          "htop"
 pkg_install    "rg"       "ripgrep"   "ripgrep"       "ripgrep"       "ripgrep"
 pkg_install    "jq"       "jq"        "jq"            "jq"            "jq"
+pkg_install    "ccache"   "ccache"    "ccache"        "ccache"        "ccache"
 
 echo ""
 
@@ -473,6 +474,16 @@ rc_add 'eval "$(fnm env --use-on-cd --shell '"$SHELL_NAME"')"'
 rc_add '# bun'
 rc_add 'export BUN_INSTALL="$HOME/.bun"'
 rc_add 'export PATH="$BUN_INSTALL/bin:$PATH"'
+
+# ccache (React Native iOS builds enable it via expo-build-properties; these settings
+# apply even when React Native points CCACHE_CONFIGPATH at its own config)
+# Xcode 26 no longer passes the CCACHE_BINARY build setting to the compiler, so React
+# Native's ccache-clang.sh wrapper silently falls back to plain clang unless the variable
+# comes from the shell environment.
+rc_add '# ccache - shared compiler cache for native iOS builds'
+rc_add 'export CCACHE_BINARY="$(command -v ccache)"'
+rc_add 'export CCACHE_MAXSIZE=20G'
+rc_add 'export CCACHE_BASEDIR="$HOME"'
 
 # Starship (should be last)
 rc_add 'eval "$(starship init '"$SHELL_NAME"')"'
