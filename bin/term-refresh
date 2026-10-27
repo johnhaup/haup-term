@@ -12,7 +12,12 @@ REPO_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 if [[ -d "$REPO_DIR/.git" && -z "${TERM_REFRESH_PULLED:-}" ]]; then
   echo "Pulling latest haup-term..."
   before="$(git -C "$REPO_DIR" rev-parse HEAD)"
-  git -C "$REPO_DIR" pull --ff-only 2>/dev/null && echo "" || echo "  (could not pull — offline or uncommitted changes)"
+  # --no-rebase: pull.rebase refuses any uncommitted change; a fast-forward only stops for changed files it would touch
+  if ! git -C "$REPO_DIR" pull --ff-only --no-rebase; then
+    echo -e "\033[1;33m  Could not pull haup-term (see above). Continuing with the local copy.\033[0m"
+    echo -e "\033[1;33m  Local changes: git -C $REPO_DIR status\033[0m"
+  fi
+  echo ""
   if [[ "$(git -C "$REPO_DIR" rev-parse HEAD)" != "$before" ]]; then
     TERM_REFRESH_PULLED=1 exec "$0" "$@"
   fi
