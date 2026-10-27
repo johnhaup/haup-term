@@ -70,7 +70,7 @@ term-refresh         # installs tools and configures your shell
 - **Tabs:** at least 20 columns wide (up to 32). Each tab is labeled with the name you gave it (`Cmd+Shift+R`, or `Ctrl+Shift+R` on Linux; an empty name goes back to automatic), else the title the running program sets (Claude Code shows its current task, over `ssh` too), else the folder name.
 - **Font:** Geist Mono, which `term-refresh` installs (Homebrew on macOS, the GitHub release on Linux). JetBrains Mono, built into WezTerm, is the fallback.
 - **Trying fonts:** `Cmd+Shift+F` (`Ctrl+Shift+Alt+F` on Linux) lists popular coding fonts and applies one to the current window without saving it. Fonts missing on a machine fall back to JetBrains Mono, which WezTerm includes.
-- **Tab colors:** each tab takes a Dracula accent picked from its folder name, so a project has the same color in every window and on every machine. The active tab is filled with that color; inactive tabs show it as text.
+- **Tab colors:** each new tab takes the next Dracula accent (purple, pink, cyan, green, orange, yellow, red, then around again) and keeps it while it's open, so neighboring tabs differ even in the same repo. The active tab is filled with that color; inactive tabs show it as text.
 
 ## Claude Code
 

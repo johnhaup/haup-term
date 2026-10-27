@@ -177,7 +177,7 @@ show_wezterm() {
   fi
   echo -e "\n  ${DIM}Theme: Dracula (Official), font Geist Mono. Edits reload automatically.${NC}"
   echo -e "  ${DIM}Tab label: your name, else the program's title (Claude Code's task), else the folder.${NC}"
-  echo -e "  ${DIM}Tab color: picked from the folder name, so a project keeps its color everywhere.${NC}"
+  echo -e "  ${DIM}Tab color: each new tab takes the next Dracula color and keeps it.${NC}"
 }
 
 show_summary() {

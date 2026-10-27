@@ -140,18 +140,10 @@ local function tab_label(tab)
   return cwd_name(tab.active_pane) or title
 end
 
--- Same project, same color: hash the folder (or label) into the accent list
-local function tab_color(key)
-  local hash = 0
-  for i = 1, #key do
-    hash = (hash * 31 + key:byte(i)) % 2147483647
-  end
-  return dracula.accents[hash % #dracula.accents + 1]
-end
-
 wezterm.on("format-tab-title", function(tab, _, _, _, _, max_width)
   local label = tab_label(tab)
-  local color = tab_color(cwd_name(tab.active_pane) or label)
+  -- Each tab keeps the color it opened with; tab ids count up, so neighbors differ
+  local color = dracula.accents[tab.tab_id % #dracula.accents + 1]
 
   -- Title plus the × button and its margins must fit in max_width. In windows too narrow for
   -- every tab, WezTerm shrinks them all and clips the ends regardless.
