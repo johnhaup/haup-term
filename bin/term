@@ -164,16 +164,18 @@ show_wezterm() {
   if [[ "$(uname)" == "Darwin" ]]; then
     key "Cmd+T / Cmd+W" "New tab / close pane or tab (never asks)"
     key "Cmd+Shift+R" "Rename tab (empty name = automatic label)"
+    key "Cmd+Shift+F" "Try a font in this window (not saved)"
     key "Cmd+D / Cmd+Shift+D" "Split right / split down"
     key "Cmd+[ / Cmd+]" "Previous / next pane"
     key "Cmd+Shift+[ / ]" "Previous / next tab"
   else
     key "Ctrl+Shift+T / W" "New tab / close pane or tab (never asks)"
     key "Ctrl+Shift+R" "Rename tab (empty name = automatic label)"
+    key "Ctrl+Shift+Alt+F" "Try a font in this window (not saved)"
     key "Ctrl+Shift+O / E" "Split right / split down"
     key "Ctrl+Super+[ / ]" "Previous / next pane"
   fi
-  echo -e "\n  ${DIM}Theme: Dracula (Official). Edits reload automatically.${NC}"
+  echo -e "\n  ${DIM}Theme: Dracula (Official), font Geist Mono. Edits reload automatically.${NC}"
   echo -e "  ${DIM}Tab label: your name, else the program's title (Claude Code's task), else the folder.${NC}"
   echo -e "  ${DIM}Tab color: picked from the folder name, so a project keeps its color everywhere.${NC}"
 }

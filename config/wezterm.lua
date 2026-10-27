@@ -7,6 +7,9 @@ local config = wezterm.config_builder()
 
 -- Theme: Dracula's soft blue-black, with its accents reused for tab colors
 config.color_scheme = "Dracula (Official)"
+
+-- Geist Mono (term-refresh installs it); JetBrains Mono ships with WezTerm as the fallback
+config.font = wezterm.font_with_fallback({ "Geist Mono", "JetBrains Mono" })
 local dracula = {
   bg = "#282a36",
   bar = "#21222c",
@@ -14,13 +17,35 @@ local dracula = {
   accents = { "#bd93f9", "#ff79c6", "#8be9fd", "#50fa7b", "#ffb86c", "#f1fa8c", "#ff5555" },
 }
 
--- Close windows, tabs and panes without asking
+-- Close windows, tabs and panes without asking. The tab × button only skips the prompt
+-- for programs in this list, so it names the usual ones beyond the shells.
 config.window_close_confirmation = "NeverPrompt"
+config.skip_close_confirmation_for_processes_named = {
+  "zsh", "bash", "fish", "sh", "tmux", "ssh", "mosh-client", "claude", "node", "bun",
+  "python", "python3", "nvim", "vim", "less", "man", "lazygit", "yazi", "htop", "top",
+  "btop", "gh", "git", "make",
+}
 
--- Retro tab bar: no close button that prompts, and tabs render at the width we pad them to
-config.use_fancy_tab_bar = false
+-- Fancy tab bar for its × close buttons, in Dracula colors
+config.use_fancy_tab_bar = true
 config.tab_max_width = 32
-config.colors = { tab_bar = { background = dracula.bar } }
+config.window_frame = {
+  active_titlebar_bg = dracula.bar,
+  inactive_titlebar_bg = dracula.bar,
+  -- Monospace like the terminal, so the minimum width (counted in columns) holds
+  font = wezterm.font_with_fallback({
+    { family = "Geist Mono", weight = "Bold" },
+    { family = "JetBrains Mono", weight = "Bold" },
+  }),
+  font_size = 12.0,
+}
+config.colors = {
+  tab_bar = {
+    inactive_tab_edge = dracula.bar,
+    new_tab = { bg_color = dracula.bar, fg_color = "#f8f8f2" },
+    new_tab_hover = { bg_color = dracula.tab, fg_color = "#f8f8f2" },
+  },
+}
 local TAB_MIN_WIDTH = 20
 
 -- Rename the current tab; an empty name goes back to the automatic label
@@ -29,6 +54,30 @@ local rename_tab = act.PromptInputLine({
   action = wezterm.action_callback(function(window, _, line)
     if line ~= nil then
       window:active_tab():set_title(line)
+    end
+  end),
+})
+
+-- Try a font in the current window only; nothing is saved. Fonts missing on this
+-- machine fall back to the default.
+local FONTS = {
+  "JetBrains Mono", "Fira Code", "Cascadia Code", "Monaspace Neon", "Monaspace Argon",
+  "Monaspace Krypton", "Monaspace Xenon", "Monaspace Radon", "Geist Mono", "CommitMono",
+  "Maple Mono", "Victor Mono", "IBM Plex Mono", "Hack", "Menlo",
+}
+local font_choices = {}
+for _, name in ipairs(FONTS) do
+  table.insert(font_choices, { label = name })
+end
+local pick_font = act.InputSelector({
+  title = "Try a font (this window only)",
+  fuzzy = true,
+  choices = font_choices,
+  action = wezterm.action_callback(function(window, _, _, label)
+    if label then
+      local overrides = window:get_config_overrides() or {}
+      overrides.font = wezterm.font(label)
+      window:set_config_overrides(overrides)
     end
   end),
 })
@@ -45,6 +94,7 @@ if is_mac then
     { key = "w", mods = "CMD", action = act.CloseCurrentPane({ confirm = false }) },
     { key = "w", mods = "CTRL|SHIFT", action = act.CloseCurrentTab({ confirm = false }) },
     { key = "r", mods = "CMD|SHIFT", action = rename_tab },
+    { key = "f", mods = "CMD|SHIFT", action = pick_font },
   }
 else
   config.keys = {
@@ -54,6 +104,7 @@ else
     { key = "]", mods = "CTRL|SUPER", action = act.ActivatePaneDirection("Next") },
     { key = "w", mods = "CTRL|SHIFT", action = act.CloseCurrentPane({ confirm = false }) },
     { key = "r", mods = "CTRL|SHIFT", action = rename_tab },
+    { key = "f", mods = "CTRL|SHIFT|ALT", action = pick_font },
   }
 end
 
@@ -102,7 +153,9 @@ wezterm.on("format-tab-title", function(tab, _, _, _, _, max_width)
   local label = tab_label(tab)
   local color = tab_color(cwd_name(tab.active_pane) or label)
 
-  local text = " " .. wezterm.truncate_right(label, max_width - 2) .. " "
+  -- Title plus the × button and its margins must fit in max_width. In windows too narrow for
+  -- every tab, WezTerm shrinks them all and clips the ends regardless.
+  local text = " " .. wezterm.truncate_right(label, max_width - 8) .. " "
   local pad = TAB_MIN_WIDTH - wezterm.column_width(text)
   if pad > 0 then
     text = string.rep(" ", pad // 2) .. text .. string.rep(" ", pad - pad // 2)
@@ -114,16 +167,12 @@ wezterm.on("format-tab-title", function(tab, _, _, _, _, max_width)
       { Foreground = { Color = dracula.bg } },
       { Attribute = { Intensity = "Bold" } },
       { Text = text },
-      { Background = { Color = dracula.bar } },
-      { Text = " " },
     }
   end
   return {
     { Background = { Color = dracula.tab } },
     { Foreground = { Color = color } },
     { Text = text },
-    { Background = { Color = dracula.bar } },
-    { Text = " " },
   }
 end)
 

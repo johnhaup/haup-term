@@ -307,6 +307,28 @@ elif ! check wezterm; then
   fi
 fi
 
+# Geist Mono, the font config/wezterm.lua uses
+if [[ "$OS" == "Darwin" ]]; then
+  if [[ -f "$HOME/Library/Fonts/GeistMono-Regular.otf" ]] || brew list --cask font-geist-mono &>/dev/null; then
+    ok "  ✓ Geist Mono already installed"
+  else
+    brew install --cask font-geist-mono
+  fi
+elif fc-list 2>/dev/null | grep -qi "Geist Mono"; then
+  ok "  ✓ Geist Mono already installed"
+elif ! command -v unzip &>/dev/null; then
+  warn "  Install unzip, then rerun to get the Geist Mono font"
+else
+  GEIST_VERSION="$(curl -fsSL https://api.github.com/repos/vercel/geist-font/releases/latest | grep -m1 '"tag_name"' | sed -E 's/.*"([^"]+)".*/\1/')"
+  GEIST_TMP="$(mktemp -d)"
+  curl -fsSL -o "$GEIST_TMP/geist.zip" "https://github.com/vercel/geist-font/releases/download/$GEIST_VERSION/geist-font-$GEIST_VERSION.zip"
+  mkdir -p "$HOME/.local/share/fonts/GeistMono"
+  unzip -qjo "$GEIST_TMP/geist.zip" 'geist-font/GeistMono/otf/*' -d "$HOME/.local/share/fonts/GeistMono"
+  rm -rf "$GEIST_TMP"
+  fc-cache -f "$HOME/.local/share/fonts" >/dev/null
+  ok "  ✓ Installed Geist Mono $GEIST_VERSION"
+fi
+
 echo ""
 
 # ============================================================
