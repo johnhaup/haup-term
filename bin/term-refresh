@@ -5,6 +5,19 @@
 
 set -euo pipefail
 
+# --- Pull latest changes ---
+# Bash keeps running the copy of this script it already opened, so after a pull
+# that changes anything, restart once to run the new version.
+REPO_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+if [[ -d "$REPO_DIR/.git" && -z "${TERM_REFRESH_PULLED:-}" ]]; then
+  echo "Pulling latest haup-term..."
+  before="$(git -C "$REPO_DIR" rev-parse HEAD)"
+  git -C "$REPO_DIR" pull --ff-only 2>/dev/null && echo "" || echo "  (could not pull — offline or uncommitted changes)"
+  if [[ "$(git -C "$REPO_DIR" rev-parse HEAD)" != "$before" ]]; then
+    TERM_REFRESH_PULLED=1 exec "$0" "$@"
+  fi
+fi
+
 echo ""
 echo '██╗  ██╗ █████╗ ██╗   ██╗██████╗        ████████╗███████╗██████╗ ███╗   ███╗'
 echo '██║  ██║██╔══██╗██║   ██║██╔══██╗       ╚══██╔══╝██╔════╝██╔══██╗████╗ ████║'
@@ -13,13 +26,6 @@ echo '██╔══██║██╔══██║██║   ██║█�
 echo '██║  ██║██║  ██║╚██████╔╝██║               ██║   ███████╗██║  ██║██║ ╚═╝ ██║'
 echo '╚═╝  ╚═╝╚═╝  ╚═╝ ╚═════╝ ╚═╝               ╚═╝   ╚══════╝╚═╝  ╚═╝╚═╝     ╚═╝'
 echo ""
-
-# --- Pull latest changes ---
-REPO_DIR="$(cd "$(dirname "$0")/.." && pwd)"
-if [[ -d "$REPO_DIR/.git" ]]; then
-  echo "Pulling latest haup-term..."
-  git -C "$REPO_DIR" pull --ff-only 2>/dev/null && echo "" || echo "  (could not pull — offline or uncommitted changes)"
-fi
 
 # Colors
 RED='\033[0;31m'
