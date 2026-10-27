@@ -159,6 +159,25 @@ show_htop() {
   key "q" "Quit"
 }
 
+show_wezterm() {
+  header "WezTerm — terminal (config: config/wezterm.lua, synced via this repo)"
+  if [[ "$(uname)" == "Darwin" ]]; then
+    key "Cmd+T / Cmd+W" "New tab / close pane or tab (never asks)"
+    key "Cmd+Shift+R" "Rename tab (empty name = automatic label)"
+    key "Cmd+D / Cmd+Shift+D" "Split right / split down"
+    key "Cmd+[ / Cmd+]" "Previous / next pane"
+    key "Cmd+Shift+[ / ]" "Previous / next tab"
+  else
+    key "Ctrl+Shift+T / W" "New tab / close pane or tab (never asks)"
+    key "Ctrl+Shift+R" "Rename tab (empty name = automatic label)"
+    key "Ctrl+Shift+O / E" "Split right / split down"
+    key "Ctrl+Super+[ / ]" "Previous / next pane"
+  fi
+  echo -e "\n  ${DIM}Theme: Dracula (Official). Edits reload automatically.${NC}"
+  echo -e "  ${DIM}Tab label: your name, else the program's title (Claude Code's task), else the folder.${NC}"
+  echo -e "  ${DIM}Tab color: picked from the folder name, so a project keeps its color everywhere.${NC}"
+}
+
 show_summary() {
   echo -e "${BOLD}Terminal Toolkit${NC}\n"
   printf "  ${CYAN}%-12s${NC} %-10s  %s\n" "TOOL" "STATUS" "DESCRIPTION"
@@ -176,6 +195,7 @@ show_summary() {
     "gh:GitHub CLI for PRs, issues, repos, and workflows"
     "gh-dash:GitHub dashboard TUI (gh extension)"
     "gh-enhance:GitHub Actions monitor (gh extension)"
+    "wezterm:GPU-accelerated terminal (Dracula theme, colored tabs)"
   )
   for entry in "${tools[@]}"; do
     local name="${entry%%:*}"
@@ -187,6 +207,10 @@ show_summary() {
       else
         printf "  ${YELLOW}%-12s${NC} ${YELLOW}%-10s${NC}  %s\n" "$name" "missing" "$desc"
       fi
+      continue
+    fi
+    if [[ "$name" == "wezterm" && -d "/Applications/WezTerm.app" ]]; then
+      printf "  ${GREEN}%-12s${NC} ${GREEN}%-10s${NC}  %s\n" "$name" "installed" "$desc"
       continue
     fi
     if command -v "$name" &>/dev/null; then
@@ -212,6 +236,7 @@ show_all() {
   show_eza
   show_posting
   show_htop
+  show_wezterm
   echo ""
 }
 
@@ -229,10 +254,11 @@ case "${1:-}" in
   gh-enhance|enhance) show_gh_enhance ;;
   posting) show_posting ;;
   htop)    show_htop ;;
+  wezterm|wez) show_wezterm ;;
   "")      show_all ;;
   *)
     echo -e "${YELLOW}Unknown tool: $1${NC}"
-    echo "Available: summary, fzf, zoxide, yazi, lazygit, gh, gh-dash, gh-enhance, bat, fd, eza, posting, htop"
+    echo "Available: summary, fzf, zoxide, yazi, lazygit, gh, gh-dash, gh-enhance, bat, fd, eza, posting, htop, wezterm"
     exit 1
     ;;
 esac

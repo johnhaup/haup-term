@@ -31,7 +31,7 @@ term-refresh         # installs tools and configures your shell
 
 | Command | Description |
 |---|---|
-| `term` | Terminal cheatsheet. Run `term` for everything, or `term fzf`, `term yazi`, etc. for a specific tool. |
+| `term` | Terminal cheatsheet. Run `term` for everything, or `term fzf`, `term wezterm`, etc. for a specific tool. |
 | `term-refresh` | Installs dev tools and configures the shell. Detects OS (macOS/Linux) and package manager (Homebrew, apt, dnf, pacman). Idempotent. |
 | `claude-handoff [dir]` | Installs the Claude Code handoff kit into a project: `docs/AGENT_CONTEXT.md` (loaded every session), an archive for pruned entries, and a Stop hook that blocks ending a turn that changed code without updating the doc. Idempotent. |
 
@@ -60,6 +60,15 @@ term-refresh         # installs tools and configures your shell
 | [WezTerm](https://wezfurlong.org/wezterm/) | GPU-accelerated terminal (config linked to `~/.config/wezterm/wezterm.lua`) |
 | [Handy](https://handy.computer) | Offline speech-to-text dictation, pastes into any app (plus `wtype`/`xdotool` on Linux) |
 | [trash](https://github.com/ali-rantakari/trash) | Move files to Trash instead of `rm` (macOS only) |
+
+## WezTerm
+
+`term-refresh` links `config/wezterm.lua` to `~/.config/wezterm/wezterm.lua`, so every machine gets the same setup after a `git pull`. WezTerm reloads the config on save. Run `term wezterm` for the keys.
+
+- **Theme:** Dracula (Official), a soft blue-black background.
+- **Closing:** windows, tabs and panes close without asking, including ones running Claude or `ssh`.
+- **Tabs:** at least 20 columns wide (up to 32). Each tab is labeled with the name you gave it (`Cmd+Shift+R`, or `Ctrl+Shift+R` on Linux; an empty name goes back to automatic), else the title the running program sets (Claude Code shows its current task, over `ssh` too), else the folder name.
+- **Tab colors:** each tab takes a Dracula accent picked from its folder name, so a project has the same color in every window and on every machine. The active tab is filled with that color; inactive tabs show it as text.
 
 ## Claude Code
 
