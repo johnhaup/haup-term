@@ -28,7 +28,7 @@ config.skip_close_confirmation_for_processes_named = {
 
 -- Fancy tab bar for its × close buttons, in Dracula colors
 config.use_fancy_tab_bar = true
-config.tab_max_width = 32
+config.tab_max_width = 56
 config.window_frame = {
   active_titlebar_bg = dracula.bar,
   inactive_titlebar_bg = dracula.bar,
@@ -46,7 +46,7 @@ config.colors = {
     new_tab_hover = { bg_color = dracula.tab, fg_color = "#f8f8f2" },
   },
 }
-local TAB_MIN_WIDTH = 20
+local TAB_MIN_WIDTH = 32
 
 -- Rename the current tab; an empty name goes back to the automatic label
 local rename_tab = act.PromptInputLine({
@@ -128,14 +128,23 @@ local function is_idle_title(title)
 end
 
 -- Label priority: a name set with rename, then a title the program set (Claude Code sets
--- one per task, also over ssh), then the folder
+-- one per task, also over ssh) prefixed with the folder, then the folder
 local function tab_label(tab)
   if tab.tab_title ~= "" then
     return tab.tab_title
   end
   local title = tab.active_pane.title:match("^%s*(.-)%s*$")
   if not is_idle_title(title) then
-    return title
+    local folder = cwd_name(tab.active_pane)
+    if not folder or folder == "~" then
+      return title
+    end
+    -- Keep Claude Code's leading status glyph (✳ ◐ …) in front of the folder
+    local glyph, summary = title:match("^([^%w%p%s]+)%s+(.+)$")
+    if glyph then
+      return glyph .. " " .. folder .. " - " .. summary
+    end
+    return folder .. " - " .. title
   end
   return cwd_name(tab.active_pane) or title
 end
