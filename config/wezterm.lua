@@ -17,6 +17,13 @@ local dracula = {
   accents = { "#bd93f9", "#ff79c6", "#8be9fd", "#50fa7b", "#ffb86c", "#f1fa8c", "#ff5555" },
 }
 
+-- Tabs live in a background mux server that the window connects to, so quitting WezTerm
+-- (or a crash) leaves shells and Claude sessions running; the next launch reattaches.
+-- Closing a tab or pane still ends it. After a WezTerm update, restart the server with
+-- `pkill wezterm-mux-server` so it runs the new version.
+config.unix_domains = { { name = "unix" } }
+config.default_gui_startup_args = { "connect", "unix" }
+
 -- Close windows, tabs and panes without asking. The tab × button only skips the prompt
 -- for programs in this list, so it names the usual ones beyond the shells.
 config.window_close_confirmation = "NeverPrompt"
@@ -32,10 +39,12 @@ config.tab_max_width = 56
 config.window_frame = {
   active_titlebar_bg = dracula.bar,
   inactive_titlebar_bg = dracula.bar,
-  -- Monospace like the terminal, so the minimum width (counted in columns) holds
+  -- Monospace like the terminal, so the minimum width (counted in columns) holds. Menlo
+  -- draws Claude Code's ✳ and ◐ as text in the tab's color; without it macOS uses color emoji.
   font = wezterm.font_with_fallback({
     { family = "Geist Mono", weight = "Bold" },
     { family = "JetBrains Mono", weight = "Bold" },
+    wezterm.target_triple:find("darwin") and { family = "Menlo", weight = "Bold" } or nil,
   }),
   font_size = 12.0,
 }
@@ -108,13 +117,20 @@ else
   }
 end
 
--- Last folder of the pane's working directory, or nil when unknown (e.g. over plain ssh)
-local function cwd_name(pane)
-  local cwd = pane.current_working_dir
+-- Path of a pane's working directory, or nil when unknown (e.g. over plain ssh)
+local function cwd_path(cwd)
   if not cwd then
     return nil
   end
-  local path = (type(cwd) == "string" and cwd or cwd.file_path):gsub("/+$", "")
+  return ((type(cwd) == "string" and cwd or cwd.file_path):gsub("/+$", ""))
+end
+
+-- Last folder of the working directory, or nil when unknown
+local function cwd_name(cwd)
+  local path = cwd_path(cwd)
+  if not path then
+    return nil
+  end
   if path == "" or path == wezterm.home_dir then
     return "~"
   end
@@ -127,6 +143,23 @@ local function is_idle_title(title)
   return SHELL_TITLES[title] or title:find("^[~/]") or title:find("^%.%.")
 end
 
+-- Claude Code starts its title with a spinning half circle while it works and ✳ when it
+-- is done or needs an answer
+local WORKING_GLYPHS = { "◐", "◑", "◒", "◓" }
+local WAITING_GLYPH = "✳"
+-- Returns "working" or "waiting", the glyph and the rest of the title, or nil for other titles
+local function claude_state(title)
+  for _, glyph in ipairs(WORKING_GLYPHS) do
+    if title:sub(1, #glyph) == glyph then
+      return "working", glyph, title:sub(#glyph + 1):match("^%s*(.-)$")
+    end
+  end
+  if title:sub(1, #WAITING_GLYPH) == WAITING_GLYPH then
+    return "waiting", WAITING_GLYPH, title:sub(#WAITING_GLYPH + 1):match("^%s*(.-)$")
+  end
+  return nil
+end
+
 -- Label priority: a name set with rename, then a title the program set (Claude Code sets
 -- one per task, also over ssh) prefixed with the folder, then the folder
 local function tab_label(tab)
@@ -135,22 +168,33 @@ local function tab_label(tab)
   end
   local title = tab.active_pane.title:match("^%s*(.-)%s*$")
   if not is_idle_title(title) then
-    local folder = cwd_name(tab.active_pane)
+    local folder = cwd_name(tab.active_pane.current_working_dir)
     if not folder or folder == "~" then
       return title
     end
-    -- Keep Claude Code's leading status glyph (✳ ◐ …) in front of the folder
-    local glyph, summary = title:match("^([^%w%p%s]+)%s+(.+)$")
-    if glyph then
+    -- Keep Claude Code's status glyph (✳ ◐ …) in front of the folder
+    local state, glyph, summary = claude_state(title)
+    if state then
       return glyph .. " " .. folder .. " - " .. summary
     end
     return folder .. " - " .. title
   end
-  return cwd_name(tab.active_pane) or title
+  return cwd_name(tab.active_pane.current_working_dir) or title
 end
 
 wezterm.on("format-tab-title", function(tab, _, _, _, _, max_width)
   local label = tab_label(tab)
+  -- ● marks a tab whose Claude finished while you were elsewhere, until you open it
+  local key = tostring(tab.tab_id)
+  local attention = wezterm.GLOBAL.attention or {}
+  if attention[key] then
+    if tab.is_active then
+      attention[key] = nil
+      wezterm.GLOBAL.attention = attention
+    else
+      label = "● " .. label
+    end
+  end
   -- Each tab keeps the color it opened with; tab ids count up, so neighbors differ
   local color = dracula.accents[tab.tab_id % #dracula.accents + 1]
 
@@ -175,6 +219,73 @@ wezterm.on("format-tab-title", function(tab, _, _, _, _, max_width)
     { Foreground = { Color = color } },
     { Text = text },
   }
+end)
+
+-- Current git branch of a folder, cached for a few seconds since the status bar refreshes every second
+local branch_cache = {}
+local function git_branch(path)
+  if not path then
+    return nil
+  end
+  local cached = branch_cache[path]
+  if cached and os.time() - cached.at < 5 then
+    return cached.branch
+  end
+  local ok, out = wezterm.run_child_process({ "git", "-C", path, "branch", "--show-current" })
+  local branch = ok and out:match("^%s*(.-)%s*$") or nil
+  if branch == "" then
+    branch = nil
+  end
+  branch_cache[path] = { at = os.time(), branch = branch }
+  return branch
+end
+
+wezterm.on("update-status", function(window, pane)
+  local states = wezterm.GLOBAL.claude_states or {}
+  local attention = wezterm.GLOBAL.attention or {}
+  local working, unread = 0, 0
+
+  for _, tab in ipairs(window:mux_window():tabs()) do
+    for _, p in ipairs(tab:panes()) do
+      local title = p:get_title()
+      local state, _, summary = claude_state(title)
+      local key = tostring(p:pane_id())
+      if state == "working" then
+        working = working + 1
+      elseif state == "waiting" then
+        -- Notify when Claude stops in a pane you aren't looking at
+        local watching = window:is_focused() and p:pane_id() == pane:pane_id()
+        if states[key] == "working" and not watching then
+          attention[tostring(tab:tab_id())] = true
+          local folder = cwd_name(p:get_current_working_dir()) or "Claude"
+          window:toast_notification(folder .. " — Claude is waiting", summary, nil, 5000)
+        end
+      end
+      states[key] = state
+    end
+    if attention[tostring(tab:tab_id())] and tab:tab_id() ~= window:active_tab():tab_id() then
+      unread = unread + 1
+    end
+  end
+  wezterm.GLOBAL.claude_states = states
+  wezterm.GLOBAL.attention = attention
+
+  local cells = {}
+  local function add(color, text)
+    table.insert(cells, { Foreground = { Color = color } })
+    table.insert(cells, { Text = text .. "   " })
+  end
+  local branch = git_branch(cwd_path(pane:get_current_working_dir()))
+  if branch then
+    add(dracula.accents[1], " " .. branch)
+  end
+  if working > 0 then
+    add(dracula.accents[5], WORKING_GLYPHS[1] .. " " .. working .. " working")
+  end
+  if unread > 0 then
+    add(dracula.accents[4], "● " .. unread .. " unread")
+  end
+  window:set_right_status(wezterm.format(cells))
 end)
 
 return config

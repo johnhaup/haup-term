@@ -176,7 +176,10 @@ show_wezterm() {
     key "Ctrl+Super+[ / ]" "Previous / next pane"
   fi
   echo -e "\n  ${DIM}Theme: Dracula (Official), font Geist Mono. Edits reload automatically.${NC}"
-  echo -e "  ${DIM}Tab label: your name, else the program's title (Claude Code's task), else the folder.${NC}"
+  echo -e "  ${DIM}Tab label: your name, else the folder plus the program's title (Claude Code's task), else the folder.${NC}"
+  echo -e "  ${DIM}Quitting keeps sessions running in wezterm-mux-server; relaunch reattaches.${NC}"
+  echo -e "  ${DIM}Status bar: git branch and Claude sessions working (◐) / tabs with unread replies (●).${NC}"
+  echo -e "  ${DIM}● on a tab: Claude finished there while you were elsewhere (also a notification).${NC}"
   echo -e "  ${DIM}Tab color: each new tab takes the next Dracula color and keeps it.${NC}"
 }
 
