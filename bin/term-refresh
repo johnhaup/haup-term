@@ -517,9 +517,33 @@ elif [[ "$SHELL_NAME" == "bash" ]]; then
   rc_add 'eval "$(fzf --bash)"'
 fi
 
-# zoxide
+# zoxide — replaces cd so every directory change is recorded; older setups
+# had the plain init line, which is swapped in place rather than duplicated
+zoxide_old='eval "$(zoxide init '"$SHELL_NAME"')"'
+zoxide_line='eval "$(zoxide init '"$SHELL_NAME"' --cmd cd)"'
+if grep -qxF "$zoxide_old" "$SHELL_RC" 2>/dev/null; then
+  awk -v old="$zoxide_old" -v new="$zoxide_line" '$0 == old { $0 = new } { print }' "$SHELL_RC" > "$SHELL_RC.tmp" \
+    && mv "$SHELL_RC.tmp" "$SHELL_RC"
+  info "  Updated zoxide in $SHELL_RC to replace cd"
+fi
 rc_add '# zoxide (smart cd)'
-rc_add 'eval "$(zoxide init '"$SHELL_NAME"')"'
+rc_add "$zoxide_line"
+
+# Seed zoxide with each project folder it doesn't know yet, so they're findable before a first visit
+if [[ -d "$HOME/Projects" ]]; then
+  known="$(zoxide query -l 2>/dev/null)"
+  seeded=0
+  while IFS= read -r dir; do
+    if ! grep -qxF "$dir" <<< "$known"; then
+      zoxide add "$dir" && seeded=$((seeded + 1))
+    fi
+  done < <(find "$HOME/Projects" -mindepth 1 -maxdepth 1 -type d ! -name '.*')
+  if (( seeded > 0 )); then
+    info "  Added $seeded ~/Projects folders to zoxide"
+  else
+    ok "  ✓ zoxide already knows every ~/Projects folder"
+  fi
+fi
 
 # fnm
 rc_add '# fnm (Node version manager)'

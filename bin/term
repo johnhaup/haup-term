@@ -25,10 +25,10 @@ show_fzf() {
 
 show_zoxide() {
   header "zoxide — smart cd"
-  cmd "z <partial>" "Jump to best-match directory"
-  cmd "z foo bar" "Match dir containing foo AND bar"
-  cmd "zi" "Interactive selection with fzf"
-  cmd "z -" "Go back to previous directory"
+  cmd "cd <partial>" "Jump to best-match directory"
+  cmd "cd foo bar" "Match dir containing foo AND bar"
+  cmd "cdi" "Interactive selection with fzf"
+  cmd "cd -" "Go back to previous directory"
 }
 
 show_yazi() {
