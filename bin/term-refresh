@@ -218,6 +218,24 @@ fi
 echo ""
 
 # ============================================================
+# Agent Deck (session manager for Claude and other coding agents)
+# ============================================================
+
+info "Installing Agent Deck..."
+if ! check agent-deck; then
+  if [[ "$PKG" == "brew" ]]; then
+    brew install asheshgoplani/tap/agent-deck
+  else
+    # The installer puts the binary in ~/.local/bin, which is not on PATH by default
+    curl -fsSL https://raw.githubusercontent.com/asheshgoplani/agent-deck/main/install.sh | bash
+    export PATH="$HOME/.local/bin:$PATH"
+    rc_add 'export PATH="$HOME/.local/bin:$PATH"'
+  fi
+fi
+
+echo ""
+
+# ============================================================
 # Starship prompt
 # ============================================================
 

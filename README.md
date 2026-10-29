@@ -33,6 +33,7 @@ term-refresh         # installs tools and configures your shell
 |---|---|
 | `term` | Terminal cheatsheet. Run `term` for everything, or `term fzf`, `term wezterm`, etc. for a specific tool. |
 | `term-refresh` | Installs dev tools and configures the shell. Detects OS (macOS/Linux) and package manager (Homebrew, apt, dnf, pacman). Idempotent. |
+| `ad claude ["title"]` | Starts a Claude Code session in the current directory inside Agent Deck and attaches to it. The quoted string becomes the session title. Any other arguments go straight to `agent-deck` (`ad` alone opens the TUI). |
 | `claude-handoff [dir]` | Installs the Claude Code handoff kit into a project: `docs/AGENT_CONTEXT.md` (loaded every session), an archive for pruned entries, and a Stop hook that blocks ending a turn that changed code without updating the doc. Idempotent. |
 
 ## What `term-refresh` installs
@@ -53,6 +54,7 @@ term-refresh         # installs tools and configures your shell
 | [gh](https://cli.github.com) | GitHub CLI for PRs, issues, repos, and workflows |
 | [gh-dash](https://github.com/dlvhdr/gh-dash) | GitHub dashboard TUI (`gh` extension) |
 | [gh-enhance](https://github.com/dlvhdr/gh-enhance) | GitHub Actions monitor (`gh` extension) |
+| [Agent Deck](https://github.com/asheshgoplani/agent-deck) | Terminal session manager for Claude Code and other coding agents; sessions survive closing the terminal and can be listed and attached from other machines |
 | [posting](https://github.com/darrenburns/posting) | Keyboard-driven TUI API client |
 | [starship](https://starship.rs) | Cross-shell prompt |
 | [fnm](https://github.com/Schniz/fnm) | Fast Node version manager |

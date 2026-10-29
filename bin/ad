@@ -1,0 +1,21 @@
+#!/bin/bash
+# Shortcut for Agent Deck.
+#   ad claude ["title"]   start a Claude Code session in the current directory and attach to it
+#   ad <anything else>    passed straight to agent-deck (ad alone opens the TUI)
+
+set -euo pipefail
+
+command -v agent-deck >/dev/null || { echo "agent-deck is not installed (run term-refresh)"; exit 1; }
+
+case "${1:-}" in
+  claude)
+    shift
+    if [[ $# -gt 0 ]]; then
+      exec agent-deck add -c claude -t "$*" --attach
+    fi
+    exec agent-deck add -c claude --attach
+    ;;
+  *)
+    exec agent-deck "$@"
+    ;;
+esac

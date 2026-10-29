@@ -183,6 +183,27 @@ show_wezterm() {
   echo -e "  ${DIM}Tab color: each new tab takes the next Dracula color and keeps it.${NC}"
 }
 
+show_agent_deck() {
+  header "Agent Deck — session manager for Claude Code (ad = shortcut for agent-deck)"
+  cmd "ad claude" "Start a Claude session here and attach to it"
+  cmd "ad claude \"title\"" "Same, with a session title"
+  cmd "ad" "Open the TUI"
+  cmd "ad list" "List sessions"
+  cmd "ad session attach <id>" "Reattach to a session"
+  cmd "ad remote add <name> user@host" "Register another machine"
+  cmd "ad remote sessions <name>" "List that machine's sessions"
+  cmd "ad remote attach <name> <id>" "Attach to a session there"
+  echo -e "\n  ${DIM}Inside the TUI:${NC}"
+  key "n / g" "New session / new group"
+  key "Enter" "Attach to session"
+  key "Ctrl+Q" "Detach (session keeps running)"
+  key "/" "Search sessions"
+  key "r / R / d" "Rename / restart / delete"
+  key "?" "Show all keys"
+  key "q" "Quit"
+  echo -e "\n  ${DIM}Config: ~/.config/agent-deck/config.toml (remotes are per machine, not synced by this repo).${NC}"
+}
+
 show_summary() {
   echo -e "${BOLD}Terminal Toolkit${NC}\n"
   printf "  ${CYAN}%-12s${NC} %-10s  %s\n" "TOOL" "STATUS" "DESCRIPTION"
@@ -201,6 +222,7 @@ show_summary() {
     "gh-dash:GitHub dashboard TUI (gh extension)"
     "gh-enhance:GitHub Actions monitor (gh extension)"
     "wezterm:GPU-accelerated terminal (Dracula theme, colored tabs)"
+    "agent-deck:Session manager for Claude Code (ad claude starts one)"
   )
   for entry in "${tools[@]}"; do
     local name="${entry%%:*}"
@@ -242,6 +264,7 @@ show_all() {
   show_posting
   show_htop
   show_wezterm
+  show_agent_deck
   echo ""
 }
 
@@ -260,10 +283,11 @@ case "${1:-}" in
   posting) show_posting ;;
   htop)    show_htop ;;
   wezterm|wez) show_wezterm ;;
+  agent-deck|ad) show_agent_deck ;;
   "")      show_all ;;
   *)
     echo -e "${YELLOW}Unknown tool: $1${NC}"
-    echo "Available: summary, fzf, zoxide, yazi, lazygit, gh, gh-dash, gh-enhance, bat, fd, eza, posting, htop, wezterm"
+    echo "Available: summary, fzf, zoxide, yazi, lazygit, gh, gh-dash, gh-enhance, bat, fd, eza, posting, htop, wezterm, agent-deck"
     exit 1
     ;;
 esac
