@@ -517,14 +517,14 @@ elif [[ "$SHELL_NAME" == "bash" ]]; then
   rc_add 'eval "$(fzf --bash)"'
 fi
 
-# zoxide — replaces cd so every directory change is recorded; older setups
-# had the plain init line, which is swapped in place rather than duplicated
-zoxide_old='eval "$(zoxide init '"$SHELL_NAME"')"'
-zoxide_line='eval "$(zoxide init '"$SHELL_NAME"' --cmd cd)"'
-if grep -qxF "$zoxide_old" "$SHELL_RC" 2>/dev/null; then
-  awk -v old="$zoxide_old" -v new="$zoxide_line" '$0 == old { $0 = new } { print }' "$SHELL_RC" > "$SHELL_RC.tmp" \
+# zoxide, as z. A short-lived version replaced cd (--cmd cd); that line is swapped back
+# in place rather than duplicated
+zoxide_cd='eval "$(zoxide init '"$SHELL_NAME"' --cmd cd)"'
+zoxide_line='eval "$(zoxide init '"$SHELL_NAME"')"'
+if grep -qxF "$zoxide_cd" "$SHELL_RC" 2>/dev/null; then
+  awk -v old="$zoxide_cd" -v new="$zoxide_line" '$0 == old { $0 = new } { print }' "$SHELL_RC" > "$SHELL_RC.tmp" \
     && mv "$SHELL_RC.tmp" "$SHELL_RC"
-  info "  Updated zoxide in $SHELL_RC to replace cd"
+  info "  Switched zoxide in $SHELL_RC back to z"
 fi
 rc_add '# zoxide (smart cd)'
 rc_add "$zoxide_line"
