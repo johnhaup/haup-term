@@ -31,14 +31,22 @@ Keep `-derivedDataPath` fixed so repeat builds hit the compiler cache.
 
 ## 4. Drive it and look
 
-iOS, with AXe (`brew install cameroncooke/axe/axe`):
+iOS: read with AXe, drive with Maestro. On Xcode 27 simulators `axe tap`, `swipe` and `type` report success but do nothing (checked 2026-10-30); Maestro's driver works.
 
 ```bash
 axe describe-ui --udid $U                  # elements, labels, frames
-axe tap --label "Save" --udid $U           # or -x/-y
-axe swipe --start-x 350 --start-y 450 --end-x 50 --end-y 450 --udid $U
-axe type "hello" --udid $U
 axe screenshot --output <scratchpad>/shot.png --udid $U
+```
+
+```yaml
+# flow.yaml, run with: maestro --udid $U test flow.yaml
+appId: com.example.app
+---
+- tapOn: "Save"                 # accessibility label or visible text
+- inputText: "hello"
+- swipe: { start: "90%,50%", end: "10%,50%" }
+- assertVisible: "Saved"
+- takeScreenshot: saved          # lands under ~/.maestro/tests/<run>/
 ```
 
 Android: `adb shell input tap X Y`, `adb exec-out screencap -p > shot.png`. Maestro flows work on both if the project has them.
