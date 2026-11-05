@@ -1,0 +1,30 @@
+#!/usr/bin/env bash
+# Claude Code hook: publish what Claude is doing right now as the WezTerm user var "activity",
+# which the tab title shows. Wired to UserPromptSubmit, PreToolUse and Stop in ~/.claude/settings.json.
+# Never fails or prints: a hook problem must not disturb the session.
+
+input=$(cat)
+event=$(jq -r '.hook_event_name // empty' <<<"$input" 2>/dev/null)
+
+short() { printf '%s' "$1" | tr '\n' ' ' | cut -c1-40; }
+
+case "$event" in
+  UserPromptSubmit) text="thinking: $(short "$(jq -r '.prompt // empty' <<<"$input")")" ;;
+  Stop) text="" ;;
+  PreToolUse)
+    tool=$(jq -r '.tool_name // empty' <<<"$input")
+    case "$tool" in
+      Read | Edit | Write | MultiEdit | NotebookEdit)
+        text="$(echo "$tool" | tr '[:upper:]' '[:lower:]') $(basename "$(jq -r '.tool_input.file_path // empty' <<<"$input")")" ;;
+      Bash) text="running $(short "$(jq -r '.tool_input.command // empty' <<<"$input")")" ;;
+      Grep | Glob) text="searching $(short "$(jq -r '.tool_input.pattern // empty' <<<"$input")")" ;;
+      Agent | Task) text="agent: $(short "$(jq -r '.tool_input.description // empty' <<<"$input")")" ;;
+      "") exit 0 ;;
+      *) text="$tool" ;;
+    esac ;;
+  *) exit 0 ;;
+esac
+
+# OSC 1337 SetUserVar; WezTerm reads it as pane.user_vars.activity
+{ printf '\033]1337;SetUserVar=activity=%s\007' "$(printf '%s' "$text" | base64 | tr -d '\n')" >/dev/tty; } 2>/dev/null
+exit 0

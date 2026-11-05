@@ -161,25 +161,28 @@ local function claude_state(title)
 end
 
 -- Label priority: a name set with rename, then a title the program set (Claude Code sets
--- one per task, also over ssh) prefixed with the folder, then the folder
+-- one per task, also over ssh), then the folder. The folder of a busy tab shows in the right status.
 local function tab_label(tab)
   if tab.tab_title ~= "" then
     return tab.tab_title
   end
   local title = tab.active_pane.title:match("^%s*(.-)%s*$")
   if not is_idle_title(title) then
-    local folder = cwd_name(tab.active_pane.current_working_dir)
-    if not folder or folder == "~" then
-      return title
-    end
-    -- Keep Claude Code's status glyph (✳ ◐ …) in front of the folder
+    -- The claude-activity hook publishes what Claude is doing right now; it beats the task title
+    local activity = tab.active_pane.user_vars.activity
+    -- Keep Claude Code's status glyph (✳ ◐ …) in front
     local state, glyph, summary = claude_state(title)
     if state then
-      return glyph .. " " .. folder .. " - " .. summary
+      return glyph .. " " .. (activity ~= nil and activity ~= "" and activity or summary)
     end
-    return folder .. " - " .. title
+    return title
   end
   return cwd_name(tab.active_pane.current_working_dir) or title
+end
+
+-- Each tab keeps the color it opened with; tab ids count up, so neighbors differ
+local function tab_color(tab_id)
+  return dracula.accents[tab_id % #dracula.accents + 1]
 end
 
 wezterm.on("format-tab-title", function(tab, _, _, _, _, max_width)
@@ -195,8 +198,7 @@ wezterm.on("format-tab-title", function(tab, _, _, _, _, max_width)
       label = "● " .. label
     end
   end
-  -- Each tab keeps the color it opened with; tab ids count up, so neighbors differ
-  local color = dracula.accents[tab.tab_id % #dracula.accents + 1]
+  local color = tab_color(tab.tab_id)
 
   -- Title plus the × button and its margins must fit in max_width. In windows too narrow for
   -- every tab, WezTerm shrinks them all and clips the ends regardless.
@@ -243,16 +245,13 @@ end
 wezterm.on("update-status", function(window, pane)
   local states = wezterm.GLOBAL.claude_states or {}
   local attention = wezterm.GLOBAL.attention or {}
-  local working, unread = 0, 0
 
   for _, tab in ipairs(window:mux_window():tabs()) do
     for _, p in ipairs(tab:panes()) do
       local title = p:get_title()
       local state, _, summary = claude_state(title)
       local key = tostring(p:pane_id())
-      if state == "working" then
-        working = working + 1
-      elseif state == "waiting" then
+      if state == "waiting" then
         -- Notify when Claude stops in a pane you aren't looking at
         local watching = window:is_focused() and p:pane_id() == pane:pane_id()
         if states[key] == "working" and not watching then
@@ -263,9 +262,6 @@ wezterm.on("update-status", function(window, pane)
       end
       states[key] = state
     end
-    if attention[tostring(tab:tab_id())] and tab:tab_id() ~= window:active_tab():tab_id() then
-      unread = unread + 1
-    end
   end
   wezterm.GLOBAL.claude_states = states
   wezterm.GLOBAL.attention = attention
@@ -275,15 +271,16 @@ wezterm.on("update-status", function(window, pane)
     table.insert(cells, { Foreground = { Color = color } })
     table.insert(cells, { Text = text .. "   " })
   end
-  local branch = git_branch(cwd_path(pane:get_current_working_dir()))
+  -- Folder and branch take the color of the tab you are on
+  local color = tab_color(window:active_tab():tab_id())
+  local cwd = pane:get_current_working_dir()
+  local folder = cwd_name(cwd)
+  if folder then
+    add(color, wezterm.nerdfonts.md_folder .. " " .. folder)
+  end
+  local branch = git_branch(cwd_path(cwd))
   if branch then
-    add(dracula.accents[1], " " .. branch)
-  end
-  if working > 0 then
-    add(dracula.accents[5], WORKING_GLYPHS[1] .. " " .. working .. " working")
-  end
-  if unread > 0 then
-    add(dracula.accents[4], "● " .. unread .. " unread")
+    add(color, wezterm.nerdfonts.dev_git_branch .. " " .. branch)
   end
   window:set_right_status(wezterm.format(cells))
 end)
