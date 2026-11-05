@@ -168,6 +168,7 @@ show_wezterm() {
     key "Cmd+D / Cmd+Shift+D" "Split right / split down"
     key "Cmd+[ / Cmd+]" "Previous / next pane"
     key "Cmd+Shift+[ / ]" "Previous / next tab"
+    key "Cmd+Delete" "Delete to the start of the line (sends Ctrl+U)"
   else
     key "Ctrl+Shift+T / W" "New tab / close pane or tab (never asks)"
     key "Ctrl+Shift+R" "Rename tab (empty name = automatic label)"
@@ -176,7 +177,7 @@ show_wezterm() {
     key "Ctrl+Super+[ / ]" "Previous / next pane"
   fi
   echo -e "\n  ${DIM}Theme: Dracula (Official), font Geist Mono. Edits reload automatically.${NC}"
-  echo -e "  ${DIM}Tab label: your name, else the program's title (Claude Code: what it is doing now, via the claude-activity hook), else the folder. The right side of the bar shows the folder and git branch.${NC}"
+  echo -e "  ${DIM}Tab label: your name, else the program's title (Claude Code: what it is doing now, via the claude-activity hook), else the folder. The right side of the bar shows the folder, git branch and how long Claude has been idle in that tab.${NC}"
   echo -e "  ${DIM}Quitting keeps sessions running in wezterm-mux-server; relaunch reattaches.${NC}"
   echo -e "  ${DIM}Status bar: git branch and Claude sessions working (◐) / tabs with unread replies (●).${NC}"
   echo -e "  ${DIM}● on a tab: Claude finished there while you were elsewhere (also a notification).${NC}"
