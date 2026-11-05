@@ -1,0 +1,65 @@
+#!/usr/bin/env bash
+# How long a Claude Code conversation has been idle, for its status line.
+#   claude-idle hook                 Claude Code hook: Stop starts the clock; UserPromptSubmit and
+#                                    PreToolUse clear it, because Claude is working again
+#   claude-idle statusline [cmd...]  statusLine command: prints cmd's output (cmd gets the same
+#                                    stdin) followed by "idle 12m" while the clock runs, in the
+#                                    color of the WezTerm tab the session is in
+# Wired in ~/.claude/settings.json; statusLine.refreshInterval keeps the time counting.
+# The hook never fails or prints: a hook problem must not disturb the session.
+
+dir="${XDG_CACHE_HOME:-$HOME/.cache}/claude-idle"
+input=$(cat)
+session=$(jq -r '.session_id // empty' <<<"$input" 2>/dev/null)
+# The id becomes a file name, so accept only what a session id looks like
+[[ "$session" =~ ^[A-Za-z0-9-]+$ ]] || session=""
+stamp="$dir/$session"
+
+# Same list and order as dracula.accents in config/wezterm.lua, which colors tab N with accent N mod 7
+ACCENTS=(bd93f9 ff79c6 8be9fd 50fa7b ffb86c f1fa8c ff5555)
+
+# ANSI color of the WezTerm tab this session's pane is in; nothing outside WezTerm
+tab_color() {
+  [[ -n "$WEZTERM_PANE" ]] || return
+  local wez tab hex
+  wez=$(command -v wezterm || echo /Applications/WezTerm.app/Contents/MacOS/wezterm)
+  tab=$("$wez" cli list --format json 2>/dev/null |
+    jq -r --argjson pane "$WEZTERM_PANE" '.[] | select(.pane_id == $pane) | .tab_id' 2>/dev/null)
+  [[ "$tab" =~ ^[0-9]+$ ]] || return
+  hex=${ACCENTS[tab % ${#ACCENTS[@]}]}
+  printf '\033[38;2;%d;%d;%dm' "0x${hex:0:2}" "0x${hex:2:2}" "0x${hex:4:2}"
+}
+
+case "$1" in
+  hook)
+    [[ -n "$session" ]] || exit 0
+    if [[ "$(jq -r '.hook_event_name // empty' <<<"$input" 2>/dev/null)" == "Stop" ]]; then
+      mkdir -p "$dir" && touch "$stamp"
+      find "$dir" -type f -mtime +30 -delete 2>/dev/null
+    else
+      rm -f "$stamp"
+    fi
+    exit 0
+    ;;
+  statusline)
+    shift
+    line=""
+    (($#)) && line=$("$@" <<<"$input")
+    if [[ -n "$session" && -f "$stamp" ]]; then
+      since=$(stat -f %m "$stamp" 2>/dev/null || stat -c %Y "$stamp")
+      s=$(($(date +%s) - since))
+      if ((s < 60)); then
+        idle="<1m"
+      elif ((s < 3600)); then
+        idle="$((s / 60))m"
+      elif ((s < 86400)); then
+        idle=$(printf '%dh %02dm' $((s / 3600)) $((s % 3600 / 60)))
+      else
+        idle="$((s / 86400))d $((s % 86400 / 3600))h"
+      fi
+      color=$(tab_color)
+      line+="${line:+ | }${color}idle $idle${color:+$'\033[0m'}"
+    fi
+    printf '%s\n' "$line"
+    ;;
+esac
