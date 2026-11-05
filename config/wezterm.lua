@@ -245,34 +245,15 @@ local function git_branch(path)
   return branch
 end
 
--- "<1m", "12m", "3h 05m", "2d 4h"
-local function duration(seconds)
-  if seconds < 60 then
-    return "<1m"
-  elseif seconds < 3600 then
-    return string.format("%dm", seconds // 60)
-  elseif seconds < 86400 then
-    return string.format("%dh %02dm", seconds // 3600, seconds % 3600 // 60)
-  end
-  return string.format("%dd %dh", seconds // 86400, seconds % 86400 // 3600)
-end
-
 wezterm.on("update-status", function(window, pane)
   local states = wezterm.GLOBAL.claude_states or {}
   local attention = wezterm.GLOBAL.attention or {}
-  -- When each pane's Claude last stopped, known only for stops seen since WezTerm started
-  local idle_since = wezterm.GLOBAL.claude_idle_since or {}
 
   for _, tab in ipairs(window:mux_window():tabs()) do
     for _, p in ipairs(tab:panes()) do
       local title = p:get_title()
       local state, _, summary = claude_state(title)
       local key = tostring(p:pane_id())
-      if state ~= "waiting" then
-        idle_since[key] = nil
-      elseif states[key] == "working" then
-        idle_since[key] = os.time()
-      end
       if state == "waiting" then
         -- Notify when Claude stops in a pane you aren't looking at
         local watching = window:is_focused() and p:pane_id() == pane:pane_id()
@@ -287,7 +268,6 @@ wezterm.on("update-status", function(window, pane)
   end
   wezterm.GLOBAL.claude_states = states
   wezterm.GLOBAL.attention = attention
-  wezterm.GLOBAL.claude_idle_since = idle_since
 
   local cells = {}
   local function add(color, text)
@@ -304,10 +284,6 @@ wezterm.on("update-status", function(window, pane)
   local branch = git_branch(cwd_path(cwd))
   if branch then
     add(color, wezterm.nerdfonts.dev_git_branch .. " " .. branch)
-  end
-  local since = idle_since[tostring(pane:pane_id())]
-  if since then
-    add(color, wezterm.nerdfonts.md_clock_outline .. " idle " .. duration(os.time() - since))
   end
   window:set_right_status(wezterm.format(cells))
 end)

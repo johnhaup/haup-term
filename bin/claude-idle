@@ -44,7 +44,20 @@ case "$1" in
   statusline)
     shift
     line=""
-    (($#)) && line=$("$@" <<<"$input")
+    if (($#)); then
+      # The timer re-runs this every few seconds and cmd is the slow part, so reuse its last
+      # output while the payload is the same apart from the running clocks in .cost
+      cache="$dir/$session.base"
+      key="$* $(jq -c 'del(.cost)' <<<"$input" 2>/dev/null)"
+      if [[ -n "$session" && -f "$cache" && "$(head -n 1 "$cache")" == "$key" ]]; then
+        line=$(tail -n +2 "$cache")
+      else
+        line=$("$@" <<<"$input")
+        if [[ -n "$session" && -n "$line" ]] && mkdir -p "$dir" && tmp=$(mktemp "$dir/.base.XXXXXX"); then
+          printf '%s\n%s\n' "$key" "$line" >"$tmp" && mv "$tmp" "$cache"
+        fi
+      fi
+    fi
     if [[ -n "$session" && -f "$stamp" ]]; then
       since=$(stat -f %m "$stamp" 2>/dev/null || stat -c %Y "$stamp")
       s=$(($(date +%s) - since))
