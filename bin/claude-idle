@@ -5,8 +5,52 @@
 #   claude-idle statusline [cmd...]  statusLine command: prints cmd's output (cmd gets the same
 #                                    stdin) followed by "idle 12m" while the clock runs, in the
 #                                    color of the WezTerm tab the session is in
-# Wired in ~/.claude/settings.json; statusLine.refreshInterval keeps the time counting.
+#   claude-idle install [file]       Wire both into Claude Code's settings (default
+#                                    ~/.claude/settings.json): the three hooks, and a statusLine
+#                                    around the current one that refreshes every 5 seconds.
+#                                    Safe to re-run; term-refresh runs it.
 # The hook never fails or prints: a hook problem must not disturb the session.
+
+install() {
+  local settings="${1:-$HOME/.claude/settings.json}" self tmp
+  self="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/claude-idle"
+  [[ -f "$settings" ]] || { mkdir -p "$(dirname "$settings")" && echo '{}' >"$settings"; } || return 1
+  tmp=$(mktemp "${TMPDIR:-/tmp}/claude-idle.XXXXXX") || return 1
+  if ! jq --arg self "$self" '
+    ("\"" + $self + "\"") as $q
+    | reduce ("Stop", "UserPromptSubmit", "PreToolUse") as $event (.;
+        if any(.hooks[$event][]?.hooks[]?; (.command // "") | contains("/claude-idle")) then .
+        else .hooks[$event] += [{hooks: [{type: "command", command: ($q + " hook"), async: true}]}]
+        end)
+    | (.statusLine.command // "") as $current
+    | if $current | contains("/claude-idle") then .
+      else .statusLine = (.statusLine // {}) + {type: "command", command: (
+        if $current == "" then $q + " statusline"
+        # Agent Deck wants its wrapper outermost and runs what follows "--"
+        elif $current | test("agent-deck.* statusline-wrap$") then
+          $current + " -- " + $q + " statusline " + $current
+        else $q + " statusline sh -c " + ($current | @sh)
+        end)}
+      end
+    | .statusLine.refreshInterval //= 5
+  ' "$settings" >"$tmp"; then
+    rm -f "$tmp"
+    echo "claude-idle: could not read $settings as JSON" >&2
+    return 1
+  fi
+  if cmp -s <(jq -S . "$settings") <(jq -S . "$tmp"); then
+    echo "Claude idle time already wired"
+  else
+    # Write through the existing file so its permissions (or a symlink) stay as they are
+    cat "$tmp" >"$settings" && echo "Claude idle time wired into $settings (new sessions pick up the hooks)"
+  fi
+  rm -f "$tmp"
+}
+
+if [[ "$1" == install ]]; then
+  install "$2"
+  exit
+fi
 
 dir="${XDG_CACHE_HOME:-$HOME/.cache}/claude-idle"
 input=$(cat)
