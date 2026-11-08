@@ -91,6 +91,19 @@ local pick_font = act.InputSelector({
   end),
 })
 
+-- Clickable local paths, next to WezTerm's default http/mailto rules. Absolute paths and
+-- ~/paths become file:// links that macOS opens with the default app for the file type (a
+-- folder opens in Finder). A trailing :line from `file:line` references is left out of the link.
+config.hyperlink_rules = wezterm.default_hyperlink_rules()
+table.insert(config.hyperlink_rules, {
+  regex = [[~/((?:[\w./@+-]*[\w/+-]))]],
+  format = "file://" .. wezterm.home_dir .. "/$1",
+})
+table.insert(config.hyperlink_rules, {
+  regex = [[(/(?:Users|opt|private|tmp|etc|var|Applications|Volumes)/(?:[\w./@+-]*[\w/+-]))]],
+  format = "file://$1",
+})
+
 -- Split/pane keys mirror Ghostty's defaults per OS (these add to WezTerm's defaults)
 local is_mac = wezterm.target_triple:find("darwin") ~= nil
 
