@@ -493,6 +493,8 @@ if command -v claude &>/dev/null; then
     warn "  Could not install Claude plugin haup"
   fi
 
+  # The board: hooks that keep ~/.local/share/board current from every session
+  echo "  $("$SCRIPT_DIR/bin/board" install 2>&1)"
   # Idle time in Claude's status line: hooks and a statusLine around the current one
   if idle_msg=$("$SCRIPT_DIR/bin/claude-idle" install 2>&1); then
     ok "  ✓ $idle_msg"

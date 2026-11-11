@@ -1,0 +1,256 @@
+#!/usr/bin/env bash
+# board: one view of every piece of work Claude sessions have open on this machine, across sessions.
+#
+# A *thread* is a piece of work with open items. Sessions create and update threads; closing a session
+# changes nothing. A thread leaves the board when you resolve it or a session reports it done.
+#
+#   board set [--thread <id>] [--title <t>] [--doing <one line>] [--open <item>]... [--blocked <why>]
+#             [--link <url|TICKET-123|#pr>]... [--done]      update a thread (default thread: the repo you are in)
+#   board resolve|reopen <thread>                             mark done, or bring back
+#   board list                                                every open thread, one per line
+#   board top                                                 live view (q quits, r resolves, o opens links, Enter resumes)
+#   board open <thread>                                       open the thread's links in the browser
+#   board resume <thread>                                     resume the thread's last Claude session in its directory
+#   board context                                             open threads for the current repo (SessionStart hook output)
+#   board ticket <PREFIX> <base url>                          where bare ticket keys open, e.g. HAU https://linear.app/haupenthal/issue/
+#   board hook                                                Claude Code hook mode (stdin JSON); wired by `board install`
+#   board install [settings.json]                             add the hooks to ~/.claude/settings.json
+#
+# Threads live in $BOARD_DIR (default ~/.local/share/board), one JSON file each. Nothing leaves the machine.
+
+set -uo pipefail
+DIR="${BOARD_DIR:-$HOME/.local/share/board}"
+THREADS="$DIR/threads"; CONF="$DIR/config.json"
+mkdir -p "$THREADS"
+[[ -f "$CONF" ]] || echo '{"tickets":{}}' >"$CONF"
+now() { date -u +%Y-%m-%dT%H:%M:%SZ; }
+slug() { printf '%s' "$1" | tr '[:upper:]' '[:lower:]' | sed -E 's/[^a-z0-9]+/-/g; s/^-+|-+$//g' | cut -c1-48; }
+repo_of() { git -C "${1:-.}" rev-parse --show-toplevel 2>/dev/null || pwd -P; }
+branch_of() { git -C "${1:-.}" rev-parse --abbrev-ref HEAD 2>/dev/null || true; }
+thread_file() { printf '%s/%s.json' "$THREADS" "$1"; }
+
+# Write $2 (a jq filter) over thread $1, creating it when missing. Extra jq args follow.
+update() {
+  local id=$1 filter=$2; shift 2
+  local f tmp; f=$(thread_file "$id"); tmp=$(mktemp "$THREADS/.tmp.XXXXXX") || return 1
+  { [[ -f "$f" ]] && cat "$f" || jq -n --arg id "$id" '{id:$id, status:"open", open:[], links:[], sessions:[], created:null}'; } \
+    | jq --arg now "$(now)" --arg id "$id" "$@" '.created //= $now | .updated = $now | '"$filter" >"$tmp" && mv "$tmp" "$f" || { rm -f "$tmp"; return 1; }
+}
+
+# Links are {kind, ref, url}. A bare key like HAU-123 opens through config.tickets[PREFIX]; "#12" is a PR in the repo.
+link_json() {
+  local ref=$1 repo=${2:-}
+  if [[ "$ref" =~ ^https?:// ]]; then
+    local kind=url; [[ "$ref" == *github.com*/pull/* ]] && kind=pr; [[ "$ref" == *linear.app* || "$ref" == *atlassian.net* ]] && kind=ticket
+    local r; r=$(basename "$ref"); [[ "$kind" == pr ]] && r="#$r"
+    jq -n --arg k "$kind" --arg r "$r" --arg u "$ref" '{kind:$k, ref:$r, url:$u}'
+  elif [[ "$ref" =~ ^([A-Z][A-Z0-9]+)-[0-9]+$ ]]; then
+    local base; base=$(jq -r --arg p "${BASH_REMATCH[1]}" '.tickets[$p] // ""' "$CONF")
+    jq -n --arg r "$ref" --arg u "${base:+$base$ref}" '{kind:"ticket", ref:$r, url:$u}'
+  elif [[ "$ref" =~ ^#?([0-9]+)$ ]] && [[ -n "$repo" ]]; then
+    local origin; origin=$(git -C "$repo" remote get-url origin 2>/dev/null | sed -E 's#^git@github.com:#https://github.com/#; s#\.git$##')
+    jq -n --arg r "#${BASH_REMATCH[1]}" --arg u "${origin:+$origin/pull/${BASH_REMATCH[1]}}" '{kind:"pr", ref:$r, url:$u}'
+  else
+    jq -n --arg r "$ref" '{kind:"note", ref:$r, url:""}'
+  fi
+}
+
+cmd_set() {
+  local repo cwd id="" title="" doing="" blocked="" done="" ; local -a opens=() links=()
+  cwd=$(pwd -P); repo=$(repo_of "$cwd")
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --thread) id=$(slug "$2"); shift 2 ;;
+      --title) title=$2; shift 2 ;;
+      --doing) doing=$2; shift 2 ;;
+      --open) opens+=("$2"); shift 2 ;;
+      --blocked) blocked=$2; shift 2 ;;
+      --link) links+=("$2"); shift 2 ;;
+      --done) done=1; shift ;;
+      *) echo "board set: unknown option $1" >&2; return 2 ;;
+    esac
+  done
+  [[ -n "$id" ]] || id=$(slug "$(basename "$repo")")
+  local linkjson='[]'; for l in "${links[@]+"${links[@]}"}"; do linkjson=$(jq -c --argjson n "$(link_json "$l" "$repo")" '. + [$n]' <<<"$linkjson"); done
+  local openjson; openjson=$(printf '%s\n' "${opens[@]+"${opens[@]}"}" | jq -R . | jq -s 'map(select(length>0))')
+  update "$id" '
+      .repo = $repo | .cwd = $cwd | .branch = $branch
+      | (if $title != "" then .title = $title else . end)
+      | .title //= $id
+      | (if $doing != "" then .doing = $doing else . end)
+      | (if ($opens|length) > 0 then .open = $opens else . end)
+      | (if $blocked != "" then .blocked = $blocked elif $doing != "" then .blocked = "" else . end)
+      | .links = (.links + $links | unique_by(.ref))
+      | (if $done == "1" then .status = "done" | .done_at = $now | .open = [] | .blocked = "" else (if .status == "done" then .status = "open" | .done_at = null else . end) end)
+      | (if $session != "" then .sessions = (.sessions + [$session] | unique) | .last_session = $session else . end)
+    ' --arg repo "$repo" --arg cwd "$cwd" --arg branch "$(branch_of "$cwd")" --arg title "$title" --arg doing "$doing" \
+      --argjson opens "$openjson" --arg blocked "$blocked" --argjson links "$linkjson" --arg done "${done:-}" --arg session "${CLAUDE_CODE_SESSION_ID:-}" \
+    && echo "board: $id updated"
+}
+
+cmd_resolve() { [[ -n "${1:-}" && -f "$(thread_file "$1")" ]] || { echo "board: no thread $1" >&2; return 1; }; update "$1" '.status = "done" | .done_at = $now | .open = [] | .blocked = ""'; echo "board: $1 resolved"; }
+cmd_reopen()  { [[ -n "${1:-}" && -f "$(thread_file "$1")" ]] || { echo "board: no thread $1" >&2; return 1; }; update "$1" '.status = "open" | .done_at = null'; echo "board: $1 reopened"; }
+cmd_ticket()  { [[ $# -eq 2 ]] || { echo "usage: board ticket <PREFIX> <base url>" >&2; return 2; }; local tmp; tmp=$(mktemp); jq --arg p "$1" --arg u "$2" '.tickets[$p] = $u' "$CONF" >"$tmp" && mv "$tmp" "$CONF"; echo "board: $1-* opens at $2"; }
+
+# ---- hooks -----------------------------------------------------------------------------------------------------------
+# Stop: note the session's last message on the repo's thread (or the thread this session last wrote), decide whether it
+# ended on a question for John, and pick up ticket keys and PR links it mentioned. UserPromptSubmit: the session is working
+# again. PreToolUse AskUserQuestion: waiting. SessionStart: print open threads for this repo, which lands in Claude's context.
+last_assistant_text() {  # $1 transcript path; only the tail, transcripts grow to many MB
+  [[ -f "$1" ]] || return 0
+  tail -c 300000 "$1" | jq -r 'select(.type? == "assistant") | .message.content[]? | select(.type == "text") | .text' 2>/dev/null | tail -c 4000
+}
+thread_for_session() {  # the thread this session last touched, else the repo's thread
+  local session=$1 repo=$2 f
+  f=$(grep -ls "\"$session\"" "$THREADS"/*.json 2>/dev/null | xargs -r ls -t 2>/dev/null | head -1)
+  [[ -n "$f" ]] && { basename "$f" .json; return; }
+  slug "$(basename "$repo")"
+}
+cmd_hook() {
+  local input event session cwd repo id transcript
+  input=$(cat)
+  event=$(jq -r '.hook_event_name // empty' <<<"$input"); session=$(jq -r '.session_id // empty' <<<"$input"); cwd=$(jq -r '.cwd // empty' <<<"$input")
+  [[ "$session" =~ ^[A-Za-z0-9-]+$ ]] || exit 0
+  [[ -d "$cwd" ]] || cwd=$(pwd -P)
+  repo=$(repo_of "$cwd")
+  case "$event" in
+    SessionStart) cmd_context "$repo"; exit 0 ;;
+    UserPromptSubmit)
+      id=$(thread_for_session "$session" "$repo")
+      [[ -f "$(thread_file "$id")" ]] && update "$id" '.working = true | (if .status == "waiting" then .status = "open" else . end) | .sessions = (.sessions + [$s] | unique) | .last_session = $s' --arg s "$session" ;;
+    PreToolUse)
+      [[ "$(jq -r '.tool_name // empty' <<<"$input")" == AskUserQuestion ]] || exit 0
+      id=$(thread_for_session "$session" "$repo")
+      [[ -f "$(thread_file "$id")" ]] && update "$id" '.status = "waiting" | .working = false' ;;
+    Stop)
+      transcript=$(jq -r '.transcript_path // empty' <<<"$input")
+      id=$(thread_for_session "$session" "$repo")
+      local text; text=$(last_assistant_text "$transcript")
+      # A thread only exists once a session wrote one (board set) — a Stop alone does not create board noise.
+      [[ -f "$(thread_file "$id")" ]] || exit 0
+      local waiting=false; [[ "$(printf '%s' "$text" | tail -c 300)" == *\?* ]] && waiting=true
+      local found='[]' ref
+      while read -r ref; do [[ -n "$ref" ]] && found=$(jq -c --argjson n "$(link_json "$ref" "$repo")" '. + [$n]' <<<"$found"); done < <(
+        { grep -oE 'https?://[^ )>"\`]+' <<<"$text"; grep -oE '\b[A-Z][A-Z0-9]{1,9}-[0-9]+\b' <<<"$text"; } 2>/dev/null | sort -u | head -12)
+      update "$id" '
+          .working = false | .last_message = ($text | .[0:400]) | .sessions = (.sessions + [$s] | unique) | .last_session = $s | .cwd = $cwd
+          | (if $waiting == "true" and .status != "done" then .status = "waiting" elif .status == "waiting" then .status = "open" else . end)
+          | .links = (.links + ($found | map(select(.kind != "note"))) | unique_by(.ref))
+        ' --arg text "$text" --arg s "$session" --arg cwd "$cwd" --arg waiting "$waiting" --argjson found "$found" ;;
+  esac
+  exit 0
+}
+
+cmd_install() {
+  local settings="${1:-$HOME/.claude/settings.json}" self tmp
+  self="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/board"
+  [[ -f "$settings" ]] || { mkdir -p "$(dirname "$settings")" && echo '{}' >"$settings"; } || return 1
+  tmp=$(mktemp) || return 1
+  jq --arg self "$self" '
+    ("\"" + $self + "\" hook") as $cmd
+    | reduce ("Stop", "UserPromptSubmit", "PreToolUse", "SessionStart") as $event (.;
+        if any(.hooks[$event][]?.hooks[]?; (.command // "") | contains("/board\" hook")) then .
+        else .hooks[$event] += [{hooks: [{type: "command", command: $cmd} + (if $event == "SessionStart" then {} else {async: true} end)]}]
+        end)
+  ' "$settings" >"$tmp" || { rm -f "$tmp"; echo "board: could not read $settings as JSON" >&2; return 1; }
+  if cmp -s <(jq -S . "$settings") <(jq -S . "$tmp"); then echo "board hooks already wired"; else cat "$tmp" >"$settings" && echo "board hooks wired into $settings (new sessions pick them up)"; fi
+  rm -f "$tmp"
+}
+
+# ---- reading ---------------------------------------------------------------------------------------------------------
+all_threads() { ls -t "$THREADS"/*.json 2>/dev/null | xargs -r cat | jq -s '.'; }
+age() {  # seconds since ISO timestamp -> "3m", "2h", "4d"
+  local then; then=$(date -u -j -f %Y-%m-%dT%H:%M:%SZ "$1" +%s 2>/dev/null || date -u -d "$1" +%s 2>/dev/null || echo 0)
+  local s=$(( $(date +%s) - then ))
+  if (( s < 3600 )); then echo "$((s/60))m"; elif (( s < 86400 )); then echo "$((s/3600))h"; else echo "$((s/86400))d"; fi
+}
+# bucket: waiting | flight | open | done. "working" older than 30 min is not in flight any more, the session died or was closed.
+bucket_filter='
+  def bucket($now): if .status == "done" then "done"
+    elif .status == "waiting" then "waiting"
+    elif (.working // false) and (($now | fromdateiso8601) - (.updated | fromdateiso8601)) < 1800 then "flight"
+    else "open" end;'
+US=$'\x1f'
+rows() {  # one line per thread, fields separated by $US: bucket id title repo doing open_count blocked links updated
+  all_threads | jq -r --arg now "$(now)" "$bucket_filter"'
+    map(select(.status != "done" or ((($now | fromdateiso8601) - ((.done_at // .updated) | fromdateiso8601)) < 86400)))
+    | sort_by(.updated) | reverse
+    | .[] | [bucket($now), .id, .title, (.repo | split("/") | last), (.doing // ""), (.open | length), (.blocked // ""), (.links | map(.ref) | join(" ")), .updated] | join("\u001f")'
+}
+cmd_list() { rows | awk -F"$US" '{printf "%-8s %-28s %-18s %s", $1, $2, $4, $5; if ($6>0) printf "  [%s open]", $6; if ($7!="") printf "  blocked: %s", $7; if ($8!="") printf "  %s", $8; print ""}'; }
+cmd_context() {
+  local repo=${1:-$(repo_of)}
+  all_threads | jq -r --arg repo "$repo" '
+    map(select(.repo == $repo and .status != "done")) | if length == 0 then empty else
+    "Open threads on the board for this repo (update with `board set`, close with `board set --done`):",
+    (.[] | "- \(.id): \(.title). \(.doing // "")" + (if (.open|length)>0 then " Open: " + (.open|join("; ")) else "" end) + (if (.blocked//"")!="" then " Blocked: " + .blocked else "" end) + (if (.links|length)>0 then " Links: " + (.links|map(.ref)|join(", ")) else "" end)) end'
+}
+cmd_open() {
+  local f; f=$(thread_file "${1:-}"); [[ -f "$f" ]] || { echo "board: no thread ${1:-}" >&2; return 1; }
+  local opener=open; command -v xdg-open >/dev/null && opener=xdg-open
+  jq -r '.links[] | select(.url != "") | .url' "$f" | while read -r u; do "$opener" "$u"; done
+}
+cmd_resume() {
+  local f; f=$(thread_file "${1:-}"); [[ -f "$f" ]] || { echo "board: no thread ${1:-}" >&2; return 1; }
+  local cwd sid; cwd=$(jq -r '.cwd // .repo' "$f"); sid=$(jq -r '.last_session // ""' "$f")
+  cd "$cwd" || return 1
+  if [[ -n "$sid" ]]; then exec claude --resume "$sid"; else exec claude; fi
+}
+
+# ---- live view -------------------------------------------------------------------------------------------------------
+cmd_top() {
+  local sel=0 key ids=() frame
+  local B=$'\033[1m' D=$'\033[2m' R=$'\033[0m' Y=$'\033[33m' G=$'\033[32m' C=$'\033[36m' M=$'\033[35m' INV=$'\033[7m'
+  tput civis 2>/dev/null; trap 'tput cnorm 2>/dev/null; printf "\033[0m\n"; exit 0' INT TERM EXIT
+  while :; do
+    ids=(); frame=""
+    local data; data=$(rows)
+    local cols; cols=$(tput cols 2>/dev/null || echo 120)
+    local n=0
+    for b in waiting flight open done; do
+      local title color
+      case $b in waiting) title="WAITING ON YOU"; color=$Y ;; flight) title="IN FLIGHT"; color=$G ;; open) title="UNRESOLVED"; color=$C ;; done) title="DONE TODAY"; color=$M ;; esac
+      local section; section=$(awk -F"$US" -v b="$b" '$1==b' <<<"$data")
+      [[ -n "$section" ]] || continue
+      frame+="${B}${color}${title}${R}"$'\n'
+      while IFS="$US" read -r _ id t repo doing openc blocked links updated; do
+        [[ -n "$id" ]] || continue
+        ids+=("$id")
+        local mark="  "; (( n == sel )) && mark="▶ "
+        local extra=""; (( openc > 0 )) && extra+=" ${D}${openc} open${R}"; [[ -n "$blocked" ]] && extra+=" ${Y}blocked: ${blocked}${R}"; [[ -n "$links" ]] && extra+=" ${D}${links}${R}"
+        local line; line=$(printf '%s%-26.26s %-14.14s %-5s %s' "$mark" "$t" "$repo" "$(age "$updated")" "$doing")
+        frame+="${line:0:$((cols-1))}${extra}"$'\n'
+        n=$((n+1))
+      done <<<"$section"
+      frame+=$'\n'
+    done
+    (( n == 0 )) && frame+="${D}Nothing on the board. Sessions add threads with \`board set\`.${R}"$'\n'
+    (( sel >= n && n > 0 )) && sel=$((n-1))
+    frame+="${D}[j/k] move  [Enter] resume  [o] open links  [r] resolve  [q] quit   $(date +%H:%M:%S)${R}"
+    printf '\033[H\033[2J%s\n' "$frame"
+    IFS= read -rsn1 -t 3 key || continue
+    case "$key" in
+      q) exit 0 ;;
+      j) (( sel < n-1 )) && sel=$((sel+1)) ;;
+      k) (( sel > 0 )) && sel=$((sel-1)) ;;
+      o) [[ -n "${ids[$sel]:-}" ]] && cmd_open "${ids[$sel]}" ;;
+      r) [[ -n "${ids[$sel]:-}" ]] && cmd_resolve "${ids[$sel]}" >/dev/null ;;
+      "") [[ -n "${ids[$sel]:-}" ]] && { tput cnorm; trap - EXIT; printf '\033[0m\n'; cmd_resume "${ids[$sel]}"; } ;;
+    esac
+  done
+}
+
+case "${1:-}" in
+  set) shift; cmd_set "$@" ;;
+  resolve) cmd_resolve "${2:-}" ;;
+  reopen) cmd_reopen "${2:-}" ;;
+  list|ls) cmd_list ;;
+  top|"") cmd_top ;;
+  open) cmd_open "${2:-}" ;;
+  resume) cmd_resume "${2:-}" ;;
+  context) cmd_context ;;
+  ticket) shift; cmd_ticket "$@" ;;
+  hook) cmd_hook ;;
+  install) cmd_install "${2:-}" ;;
+  *) sed -n '2,20p' "$0"; exit 2 ;;
+esac
