@@ -173,11 +173,11 @@ bucket_filter='
     elif (.working // false) and (($now | fromdateiso8601) - (.updated | fromdateiso8601)) < 1800 then "flight"
     else "open" end;'
 US=$'\x1f'
-rows() {  # one line per thread, fields separated by $US: bucket id title repo doing open_count blocked links updated
+rows() {  # one line per thread, fields separated by $US: bucket id title repo doing open_count blocked links urls updated
   all_threads | jq -r --arg now "$(now)" "$bucket_filter"'
     map(select(.status != "done" or ((($now | fromdateiso8601) - ((.done_at // .updated) | fromdateiso8601)) < 86400)))
     | sort_by(.updated) | reverse
-    | .[] | [bucket($now), .id, .title, (.repo | split("/") | last), (.doing // ""), (.open | length), (.blocked // ""), (.links | map(.ref) | join(" ")), .updated] | join("\u001f")'
+    | .[] | [bucket($now), .id, .title, (.repo | split("/") | last), (.doing // ""), (.open | length), (.blocked // ""), (.links | map(.ref) | join(" ")), (.links | map(if .url == "" then "-" else .url end) | join(" ")), .updated] | join("\u001f")'
 }
 cmd_list() { rows | awk -F"$US" '{printf "%-8s %-28s %-18s %s", $1, $2, $4, $5; if ($6>0) printf "  [%s open]", $6; if ($7!="") printf "  blocked: %s", $7; if ($8!="") printf "  %s", $8; print ""}'; }
 cmd_context() {
@@ -208,47 +208,63 @@ cmd_resume() {
 
 # ---- live view -------------------------------------------------------------------------------------------------------
 cmd_top() {
-  local sel=0 key ids=() frame
+  local sel=0 lsel=-1 key ids=() urls=() frame
   local B=$'\033[1m' D=$'\033[2m' R=$'\033[0m' Y=$'\033[33m' G=$'\033[32m' C=$'\033[36m' M=$'\033[35m' INV=$'\033[7m'
+  local opener=open; command -v xdg-open >/dev/null && opener=xdg-open
   tput civis 2>/dev/null; trap 'tput cnorm 2>/dev/null; printf "\033[0m\n"; exit 0' INT TERM EXIT
   while :; do
-    ids=(); frame=""
+    ids=(); urls=(); frame=""
     local data; data=$(rows)
     local cols; cols=$(tput cols 2>/dev/null || echo 120)
-    local n=0
+    local n=0 nlinks=0
     for b in waiting flight open done; do
       local title color
       case $b in waiting) title="WAITING ON YOU"; color=$Y ;; flight) title="IN FLIGHT"; color=$G ;; open) title="UNRESOLVED"; color=$C ;; done) title="DONE TODAY"; color=$M ;; esac
       local section; section=$(awk -F"$US" -v b="$b" '$1==b' <<<"$data")
       [[ -n "$section" ]] || continue
       frame+="${B}${color}${title}${R}"$'\n'
-      while IFS="$US" read -r _ id t repo doing openc blocked links updated; do
+      while IFS="$US" read -r _ id t repo doing openc blocked links lurls updated; do
         [[ -n "$id" ]] || continue
-        ids+=("$id")
+        ids+=("$id"); urls+=("$lurls")
         local mark="  "; (( n == sel )) && mark="▶ "
-        local extra=""; (( openc > 0 )) && extra+=" ${D}${openc} open${R}"; [[ -n "$blocked" ]] && extra+=" ${Y}blocked: ${blocked}${R}"; [[ -n "$links" ]] && extra+=" ${D}${links}${R}"
-        local line; line=$(printf '%s%-26.26s %-14.14s %-5s %s' "$mark" "$t" "$repo" "$(age "$updated")" "$doing")
+        local extra=""; (( openc > 0 )) && extra+="  ${D}${openc} open${R}"; [[ -n "$blocked" ]] && extra+="  ${Y}blocked: ${blocked}${R}"
+        local line; line=$(printf '%s%-30.30s %-14.14s %-4s %s' "$mark" "$t" "$repo" "$(age "$updated")" "$doing")
         frame+="${line:0:$((cols-1))}${extra}"$'\n'
+        if [[ -n "$links" ]]; then  # second row: the links, the chosen one highlighted on the selected thread
+          local i=0 row="    ${D}↳${R} " ref
+          for ref in $links; do
+            if (( n == sel && i == lsel )); then row+="${INV} ${ref} ${R} "; else row+="${C}${ref}${R}  "; fi
+            i=$((i+1))
+          done
+          (( n == sel )) && nlinks=$i
+          frame+="$row"$'\n'
+        elif (( n == sel )); then nlinks=0; fi
         n=$((n+1))
       done <<<"$section"
       frame+=$'\n'
     done
     (( n == 0 )) && frame+="${D}Nothing on the board. Sessions add threads with \`board set\`.${R}"$'\n'
     (( sel >= n && n > 0 )) && sel=$((n-1))
-    frame+="${D}[↑/↓ or j/k] move  [Enter] resume  [o] open links  [r] resolve  [q] quit   $(date +%H:%M:%S)${R}"
+    (( lsel >= nlinks )) && lsel=$((nlinks-1))
+    frame+="${D}[↑/↓] thread  [←/→] link  [Enter] open link or resume  [o] all links  [r] resolve  [q] quit   $(date +%H:%M:%S)${R}"
     printf '\033[H\033[2J%s\n' "$frame"
     IFS= read -rsn1 -t 3 key || continue
-    if [[ "$key" == $'\x1b' ]]; then  # arrow keys arrive as ESC [ A/B; fold them onto k/j
+    if [[ "$key" == $'\x1b' ]]; then  # arrow keys arrive as ESC [ A/B/C/D; fold them onto k/j/l/h
       local seq; IFS= read -rsn2 -t 0.05 seq || seq=""
-      case "$seq" in '[A') key=k ;; '[B') key=j ;; *) continue ;; esac
+      case "$seq" in '[A') key=k ;; '[B') key=j ;; '[C') key=l ;; '[D') key=h ;; *) continue ;; esac
     fi
     case "$key" in
       q) exit 0 ;;
-      j) (( sel < n-1 )) && sel=$((sel+1)) ;;
-      k) (( sel > 0 )) && sel=$((sel-1)) ;;
+      j) (( sel < n-1 )) && { sel=$((sel+1)); lsel=-1; } ;;
+      k) (( sel > 0 )) && { sel=$((sel-1)); lsel=-1; } ;;
+      l) (( lsel < nlinks-1 )) && lsel=$((lsel+1)) ;;
+      h) (( lsel >= 0 )) && lsel=$((lsel-1)) ;;
       o) [[ -n "${ids[$sel]:-}" ]] && cmd_open "${ids[$sel]}" ;;
       r) [[ -n "${ids[$sel]:-}" ]] && cmd_resolve "${ids[$sel]}" >/dev/null ;;
-      "") [[ -n "${ids[$sel]:-}" ]] && { tput cnorm; trap - EXIT; printf '\033[0m\n'; cmd_resume "${ids[$sel]}"; } ;;
+      "")
+        if (( lsel >= 0 )); then
+          local u; u=$(cut -d' ' -f$((lsel+1)) <<<"${urls[$sel]}"); [[ "$u" != "-" && -n "$u" ]] && "$opener" "$u"
+        elif [[ -n "${ids[$sel]:-}" ]]; then tput cnorm; trap - EXIT; printf '\033[0m\n'; cmd_resume "${ids[$sel]}"; fi ;;
     esac
   done
 }
