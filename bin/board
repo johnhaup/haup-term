@@ -220,6 +220,7 @@ cmd_top() {
     ids=(); urls=(); counts=(); frame=""
     local data; data=$(rows)
     local cols; cols=$(tput cols 2>/dev/null || echo 120)
+    local tw; tw=$(awk -F"$US" 'length($3)>m{m=length($3)} END{print (m<20?20:(m>44?44:m))}' <<<"$data")   # title column: as wide as the longest title, 20 to 44
     local n=0
     for b in waiting flight open done; do
       local title color
@@ -231,16 +232,16 @@ cmd_top() {
         [[ -n "$id" ]] || continue
         ids+=("$id"); urls+=("$lurls")
         local mark="  "; (( n == sel )) && mark="▶ "
-        local line; line=$(printf '%s%-30.30s %-14.14s %-4s %s' "$mark" "$t" "$repo" "$(age "$updated")" "$doing")
+        local line; line=$(printf "%s%-${tw}.${tw}s %-14.14s %-4s %s" "$mark" "$t" "$repo" "$(age "$updated")" "$doing")
         local nl=0; [[ -n "$links" ]] && nl=$(wc -w <<<"$links" | tr -d ' ')
         local extra="" plain=""; (( nl > 0 )) && ! is_open "$id" && { extra+="  ${D}${nl} link$([[ $nl != 1 ]] && echo s)${R}"; plain+="  ${nl} links"; }; (( openc > 0 )) && { extra+="  ${D}${openc} open${R}"; plain+="  ${openc} open"; }; [[ -n "$blocked" ]] && { extra+="  ${Y}blocked: ${blocked}${R}"; plain+="  blocked: ${blocked}"; }
         line=${line:0:$((cols-1-${#plain}))}   # clip before any colour codes go in, so the highlight never eats into the text
-        (( n == sel && lsel < 0 )) && line="${line:0:2}${INV}${line:2:30}${R}${line:32}"   # the focus is one highlighted thing: the title, or a link
         frame+="${line}${extra}"$'\n'
-        local i=0 ref row="    ${D}↳${R}"
+        local i=0 ref row="    ${D}↳${R}" used=5
         for ref in $links; do  # tickets and PRs on their own row; Tab walks them and the highlighted one opens on Enter
+          if (( used + ${#ref} + 2 > cols - 1 )); then row+=$'\n'"      "; used=6; fi   # wrap by whole links, inset deeper than the ↳ line
           if (( n == sel && i == lsel )); then row+="${INV} ${ref} ${R}"; else row+="${C} ${ref} ${R}"; fi   # same width either way, so nothing shifts
-          i=$((i+1))
+          used=$((used + ${#ref} + 2)); i=$((i+1))
         done
         counts+=("$i")
         (( i > 0 )) && is_open "$id" && frame+="$row"$'\n'
@@ -251,7 +252,7 @@ cmd_top() {
     (( n == 0 )) && frame+="${D}Nothing on the board. Sessions add threads with \`board set\`.${R}"$'\n'
     (( sel >= n && n > 0 )) && sel=$((n-1))
     local nlinks=${counts[$sel]:-0}; (( lsel >= nlinks )) && lsel=$((nlinks-1))
-    frame+="${D}[↑/↓] thread  [e] show/hide links  [Tab] next link  [Enter] open link or resume  [o] all links  [r] resolve  [q] quit   $(date +%H:%M:%S)${R}"
+    frame+="${D}↑↓ thread  e links  Tab link  Enter open/resume  o open all  r resolve  q quit  $(date +%H:%M)${R}"
     printf '\033[H\033[2J%s\n' "$frame"
     IFS= read -rsn1 -t 3 key || continue
     if [[ "$key" == $'\x1b' ]]; then  # arrows arrive as ESC [ A/B, Shift+Tab as ESC [ Z
