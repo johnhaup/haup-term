@@ -234,7 +234,7 @@ cmd_top() {
         frame+="${line}${extra}"$'\n'
         local i=0 ref row="    ${D}↳${R}"
         for ref in $links; do  # tickets and PRs on their own row; Tab walks them and the highlighted one opens on Enter
-          if (( n == sel && i == lsel )); then row+=" ${INV} ${ref} ${R}"; else row+="  ${C}${ref}${R}"; fi
+          if (( n == sel && i == lsel )); then row+="${INV} ${ref} ${R}"; else row+="${C} ${ref} ${R}"; fi   # same width either way, so nothing shifts
           i=$((i+1))
         done
         counts+=("$i")
