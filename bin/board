@@ -6,6 +6,7 @@
 #
 #   board set [--thread <id>] [--title <t>] [--doing <one line>] [--open <item>]... [--blocked <why>]
 #             [--link <url|TICKET-123|#pr>]... [--done]      update a thread (default thread: the repo you are in)
+#   board add                                                 prompts for a new thread (also `a` in the view)
 #   board resolve|reopen <thread>                             mark done, or bring back
 #   board list                                                every open thread, one per line
 #   board top                                                 live view (q quits, r resolves, o opens links, Enter resumes)
@@ -20,8 +21,8 @@
 
 set -uo pipefail
 DIR="${BOARD_DIR:-$HOME/.local/share/board}"
-THREADS="$DIR/threads"; CONF="$DIR/config.json"
-mkdir -p "$THREADS"
+THREADS="$DIR/threads"; SESSIONS="$DIR/sessions"; CONF="$DIR/config.json"
+mkdir -p "$THREADS" "$SESSIONS"
 [[ -f "$CONF" ]] || echo '{"tickets":{}}' >"$CONF"
 now() { date -u +%Y-%m-%dT%H:%M:%SZ; }
 slug() { printf '%s' "$1" | tr '[:upper:]' '[:lower:]' | sed -E 's/[^a-z0-9]+/-/g; s/^-+|-+$//g' | cut -c1-48; }
@@ -88,6 +89,21 @@ cmd_set() {
     && echo "board: $id updated"
 }
 
+cmd_add() {  # walk through the fields and create the thread in the current directory
+  local title doing blocked links opens thread
+  read -r -e -p "Title (a few words): " title; [[ -n "$title" ]] || { echo "board: nothing added"; return 1; }
+  read -r -e -p "Where it stands (one line): " doing
+  read -r -e -p "Open items, separated by ; (optional): " opens
+  read -r -e -p "Blocked on (optional): " blocked
+  read -r -e -p "Links: tickets, PR numbers, URLs, space-separated (optional): " links
+  read -r -e -p "Thread name [$(slug "$title")]: " thread; [[ -n "$thread" ]] || thread=$(slug "$title")
+  local -a args=(--thread "$thread" --title "$title")
+  [[ -n "$doing" ]] && args+=(--doing "$doing"); [[ -n "$blocked" ]] && args+=(--blocked "$blocked")
+  local item; IFS=';' read -r -a items <<<"$opens"; for item in "${items[@]+"${items[@]}"}"; do item=$(sed -E 's/^ +| +$//g' <<<"$item"); [[ -n "$item" ]] && args+=(--open "$item"); done
+  for item in $links; do args+=(--link "$item"); done
+  cmd_set "${args[@]}"
+}
+
 cmd_resolve() { [[ -n "${1:-}" && -f "$(thread_file "$1")" ]] || { echo "board: no thread $1" >&2; return 1; }; update "$1" '.status = "done" | .done_at = $now | .open = [] | .blocked = ""'; echo "board: $1 resolved"; }
 cmd_reopen()  { [[ -n "${1:-}" && -f "$(thread_file "$1")" ]] || { echo "board: no thread $1" >&2; return 1; }; update "$1" '.status = "open" | .done_at = null'; echo "board: $1 reopened"; }
 cmd_ticket()  { [[ $# -eq 2 ]] || { echo "usage: board ticket <PREFIX> <base url>" >&2; return 2; }; local tmp; tmp=$(mktemp); jq --arg p "$1" --arg u "$2" '.tickets[$p] = $u' "$CONF" >"$tmp" && mv "$tmp" "$CONF"; echo "board: $1-* opens at $2"; }
@@ -113,17 +129,17 @@ cmd_hook() {
   [[ "$session" =~ ^[A-Za-z0-9-]+$ ]] || exit 0
   [[ -d "$cwd" ]] || cwd=$(pwd -P)
   repo=$(repo_of "$cwd")
-  # The hook's parent is the claude process; remember it and its terminal so `resume` can tell an open session from a closed one
-  local where='.pid = ($pid|tonumber) | .tty = $tty'; local -a wargs=(--arg pid "$PPID" --arg tty "$(ps -o tty= -p "$PPID" 2>/dev/null | tr -d ' ')")
+  # The hook's parent is the claude process; record it and its terminal per session so `resume` can tell an open session from a closed one
+  jq -n --arg pid "$PPID" --arg tty "$(ps -o tty= -p "$PPID" 2>/dev/null | tr -d ' ')" --arg cwd "$cwd" --arg now "$(now)" '{pid:($pid|tonumber), tty:$tty, cwd:$cwd, updated:$now}' >"$SESSIONS/$session.json.tmp" && mv "$SESSIONS/$session.json.tmp" "$SESSIONS/$session.json"
   case "$event" in
     SessionStart) cmd_context "$repo"; exit 0 ;;
     UserPromptSubmit)
       id=$(thread_for_session "$session" "$repo")
-      [[ -f "$(thread_file "$id")" ]] && update "$id" "$where"' | .working = true | (if .status == "waiting" then .status = "open" else . end) | .sessions = (.sessions + [$s] | unique) | .last_session = $s' --arg s "$session" "${wargs[@]}" ;;
+      [[ -f "$(thread_file "$id")" ]] && update "$id" '.working = true | (if .status == "waiting" then .status = "open" else . end) | .sessions = (.sessions + [$s] | unique) | .last_session = $s' --arg s "$session" ;;
     PreToolUse)
       [[ "$(jq -r '.tool_name // empty' <<<"$input")" == AskUserQuestion ]] || exit 0
       id=$(thread_for_session "$session" "$repo")
-      [[ -f "$(thread_file "$id")" ]] && update "$id" "$where"' | .status = "waiting" | .working = false' "${wargs[@]}" ;;
+      [[ -f "$(thread_file "$id")" ]] && update "$id" '.status = "waiting" | .working = false' ;;
     Stop)
       transcript=$(jq -r '.transcript_path // empty' <<<"$input")
       id=$(thread_for_session "$session" "$repo")
@@ -134,11 +150,11 @@ cmd_hook() {
       local found='[]' ref
       while read -r ref; do [[ -n "$ref" ]] && found=$(jq -c --argjson n "$(link_json "$ref" "$repo")" '. + [$n]' <<<"$found"); done < <(
         { grep -oE 'https?://[^ )>"\`]+' <<<"$text"; grep -oE '\b[A-Z][A-Z0-9]{1,9}-[0-9]+\b' <<<"$text"; } 2>/dev/null | sort -u | head -12)
-      update "$id" "$where"'
-          | .working = false | .last_message = ($text | .[0:400]) | .sessions = (.sessions + [$s] | unique) | .last_session = $s | .cwd = $cwd
+      update "$id" '
+          .working = false | .last_message = ($text | .[0:400]) | .sessions = (.sessions + [$s] | unique) | .last_session = $s | .cwd = $cwd
           | (if $waiting == "true" and .status != "done" then .status = "waiting" elif .status == "waiting" then .status = "open" else . end)
           | .links = (.links + ($found | map(select(.kind != "note"))) | unique_by(.ref))
-        ' --arg text "$text" --arg s "$session" --arg cwd "$cwd" --arg waiting "$waiting" --argjson found "$found" "${wargs[@]}" ;;
+        ' --arg text "$text" --arg s "$session" --arg cwd "$cwd" --arg waiting "$waiting" --argjson found "$found" ;;
   esac
   exit 0
 }
@@ -192,16 +208,23 @@ cmd_open() {
   local opener=open; command -v xdg-open >/dev/null && opener=xdg-open
   jq -r '.links[] | select(.url != "") | .url' "$f" | while read -r u; do "$opener" "$u"; done
 }
+wez() { local w; w=$(command -v wezterm || ls /Applications/WezTerm.app/Contents/MacOS/wezterm 2>/dev/null); [[ -n "$w" ]] && "$w" "$@"; }
+# Print "pane_id tab_id" of the WezTerm pane whose terminal is $1 (a tty like ttys003), if any.
+pane_for_tty() { [[ -n "$1" && "$1" != "??" ]] && wez cli list --format json 2>/dev/null | jq -r --arg t "/dev/$1" '.[] | select(.tty_name == $t) | "\(.pane_id) \(.tab_id)"' | head -1; }
+# Print the tty of a WezTerm pane in directory $1 that has a claude process on it, if any.
+tty_for_cwd() { wez cli list --format json 2>/dev/null | jq -r --arg c "file://$1" '.[] | select(.cwd == $c or (.cwd | startswith($c + "/"))) | .tty_name' | sed 's#^/dev/##' | while read -r t; do [[ -n "$(ps -t "$t" -o comm= 2>/dev/null | grep -x claude)" ]] && { echo "$t"; break; }; done; }
 cmd_resume() {
   local f; f=$(thread_file "${1:-}"); [[ -f "$f" ]] || { echo "board: no thread ${1:-}" >&2; return 1; }
-  local cwd sid pid tty; cwd=$(jq -r '.cwd // .repo' "$f"); sid=$(jq -r '.last_session // ""' "$f"); pid=$(jq -r '.pid // ""' "$f"); tty=$(jq -r '.tty // ""' "$f")
-  if [[ -n "$pid" ]] && [[ "$(ps -o comm= -p "$pid" 2>/dev/null)" == claude ]]; then
-    # still open: jump to its WezTerm pane when we can find it by terminal, else say where it is
-    local wez pane; wez=$(command -v wezterm || ls /Applications/WezTerm.app/Contents/MacOS/wezterm 2>/dev/null)
-    pane=$([[ -n "$wez" && -n "$tty" ]] && "$wez" cli list --format json 2>/dev/null | jq -r --arg t "/dev/$tty" '.[] | select(.tty_name == $t) | .pane_id' | head -1)
-    if [[ -n "$pane" ]]; then "$wez" cli activate-pane --pane-id "$pane" && echo "board: ${1} is open, switched to its pane"; else echo "board: ${1} is already open in another terminal${tty:+ ($tty)}"; fi
-    return 0
+  local cwd sid pid="" tty=""; cwd=$(jq -r '.cwd // .repo' "$f"); sid=$(jq -r '.last_session // ""' "$f")
+  [[ -n "$sid" && -f "$SESSIONS/$sid.json" ]] && { pid=$(jq -r '.pid // ""' "$SESSIONS/$sid.json"); tty=$(jq -r '.tty // ""' "$SESSIONS/$sid.json"); }
+  if [[ -n "$pid" ]] && [[ "$(ps -o comm= -p "$pid" 2>/dev/null)" != claude ]]; then pid=""; tty=""; fi   # recorded session has ended
+  [[ -n "$tty" && "$tty" != "??" ]] || tty=$(tty_for_cwd "$cwd")   # no live record: a claude pane sitting in the thread's directory is the next best thing
+  local pane; pane=$(pane_for_tty "$tty")
+  if [[ -n "$pane" ]]; then
+    wez cli activate-tab --tab-id "${pane#* }" >/dev/null 2>&1; wez cli activate-pane --pane-id "${pane%% *}" >/dev/null 2>&1
+    echo "board: ${1} is open, switched to its tab"; return 0
   fi
+  [[ -n "$pid" ]] && { echo "board: ${1} is already open in another terminal${tty:+ ($tty)}"; return 0; }
   cd "$cwd" || return 1
   if [[ -n "$sid" ]]; then exec claude --resume "$sid"; else exec claude; fi
 }
@@ -252,7 +275,7 @@ cmd_top() {
     (( n == 0 )) && frame+="${D}Nothing on the board. Sessions add threads with \`board set\`.${R}"$'\n'
     (( sel >= n && n > 0 )) && sel=$((n-1))
     local nlinks=${counts[$sel]:-0}; (( lsel >= nlinks )) && lsel=$((nlinks-1))
-    frame+="${D}↑↓ thread  e links  Tab link  Enter open/resume  o open all  r resolve  q quit  $(date +%H:%M)${R}"
+    frame+="${D}↑↓ thread  e links  Tab link  Enter open/resume  o open all  a add  r resolve  q quit  $(date +%H:%M)${R}"
     printf '\033[H\033[2J%s\n' "$frame"
     IFS= read -rsn1 -t 3 key || continue
     if [[ "$key" == $'\x1b' ]]; then  # arrows arrive as ESC [ A/B, Shift+Tab as ESC [ Z
@@ -263,6 +286,7 @@ cmd_top() {
       q) exit 0 ;;
       j) (( sel < n-1 )) && { sel=$((sel+1)); lsel=-1; } ;;
       k) (( sel > 0 )) && { sel=$((sel-1)); lsel=-1; } ;;
+      a) tput cnorm; printf '\033[H\033[2J'; cmd_add </dev/tty; tput civis 2>/dev/null ;;
       e) [[ -n "${ids[$sel]:-}" ]] && { if is_open "${ids[$sel]}"; then hide "${ids[$sel]}"; lsel=-1; else show "${ids[$sel]}"; fi; } ;;
       $'\t') if (( lsel < nlinks-1 )); then lsel=$((lsel+1)); show "${ids[$sel]}"; elif (( sel < n-1 )); then sel=$((sel+1)); lsel=-1; fi ;;   # Tab into a collapsed thread opens its links
       B) if (( lsel >= 0 )); then lsel=$((lsel-1)); elif (( sel > 0 )); then sel=$((sel-1)); lsel=$(( ${counts[$sel]:-0} - 1 )); (( lsel >= 0 )) && show "${ids[$sel]}"; fi ;;
@@ -278,6 +302,7 @@ cmd_top() {
 
 case "${1:-}" in
   set) shift; cmd_set "$@" ;;
+  add) cmd_add ;;
   resolve) cmd_resolve "${2:-}" ;;
   reopen) cmd_reopen "${2:-}" ;;
   list|ls) cmd_list ;;
