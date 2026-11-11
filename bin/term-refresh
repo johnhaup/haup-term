@@ -130,6 +130,25 @@ pkg_install() {
   esac
 }
 
+# ccache from its prebuilt release on macOS: a Homebrew in ~/.brew (no sudo) has no bottles for it and
+# builds python, llvm and ruby from source, which fails. The release tarball is one universal binary.
+install_ccache_release() {
+  check ccache && return
+  info "  Installing ccache (prebuilt release)..."
+  local version tmp
+  version="$(curl -fsSL https://api.github.com/repos/ccache/ccache/releases/latest | sed -nE 's/.*"tag_name": *"v([^"]+)".*/\1/p')"
+  [[ -n "$version" ]] || { warn "  could not look up the ccache release; skipping"; return; }
+  tmp="$(mktemp -d)"
+  curl -fsSL -o "$tmp/ccache.tar.gz" "https://github.com/ccache/ccache/releases/download/v$version/ccache-$version-darwin.tar.gz" \
+    && tar -xzf "$tmp/ccache.tar.gz" -C "$tmp" --strip-components=1 \
+    && mkdir -p "$HOME/.local/bin" && install -m 755 "$tmp/ccache" "$HOME/.local/bin/ccache" \
+    && export PATH="$HOME/.local/bin:$PATH" && rc_add 'export PATH="$HOME/.local/bin:$PATH"' \
+    || warn "  ccache $version download failed; skipping"
+  rm -rf "$tmp"
+}
+
+export HOMEBREW_NO_ASK=1   # Homebrew 7 asks [y/n] before installing; this script is not interactive
+
 echo -e "${CYAN}=== haup-term setup ($OS${DISTRO:+ / $DISTRO}) ===${NC}\n"
 
 # ============================================================
@@ -169,7 +188,11 @@ pkg_install    "yazi"     "yazi"      "yazi"          "yazi"          "yazi"
 pkg_install    "htop"     "htop"      "htop"          "htop"          "htop"
 pkg_install    "rg"       "ripgrep"   "ripgrep"       "ripgrep"       "ripgrep"
 pkg_install    "jq"       "jq"        "jq"            "jq"            "jq"
-pkg_install    "ccache"   "ccache"    "ccache"        "ccache"        "ccache"
+if [[ "$OS" == "Darwin" ]]; then
+  install_ccache_release
+else
+  pkg_install  "ccache"   "ccache"    "ccache"        "ccache"        "ccache"
+fi
 
 echo ""
 
