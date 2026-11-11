@@ -209,6 +209,10 @@ cmd_resume() {
 # ---- live view -------------------------------------------------------------------------------------------------------
 cmd_top() {
   local sel=0 lsel=-1 key ids=() urls=() counts=() frame
+  local expanded=" "   # " id id " of threads whose links row is shown (macOS bash has no associative arrays)
+  is_open() { [[ "$expanded" == *" $1 "* ]]; }
+  show() { is_open "$1" || expanded+="$1 "; }
+  hide() { expanded=${expanded/ $1 / }; }
   local B=$'\033[1m' D=$'\033[2m' R=$'\033[0m' Y=$'\033[33m' G=$'\033[32m' C=$'\033[36m' M=$'\033[35m' INV=$'\033[7m'
   local opener=open; command -v xdg-open >/dev/null && opener=xdg-open
   tput civis 2>/dev/null; trap 'tput cnorm 2>/dev/null; printf "\033[0m\n"; exit 0' INT TERM EXIT
@@ -228,7 +232,8 @@ cmd_top() {
         ids+=("$id"); urls+=("$lurls")
         local mark="  "; (( n == sel )) && mark="▶ "
         local line; line=$(printf '%s%-30.30s %-14.14s %-4s %s' "$mark" "$t" "$repo" "$(age "$updated")" "$doing")
-        local extra="" plain=""; (( openc > 0 )) && { extra+="  ${D}${openc} open${R}"; plain+="  ${openc} open"; }; [[ -n "$blocked" ]] && { extra+="  ${Y}blocked: ${blocked}${R}"; plain+="  blocked: ${blocked}"; }
+        local nl=0; [[ -n "$links" ]] && nl=$(wc -w <<<"$links" | tr -d ' ')
+        local extra="" plain=""; (( nl > 0 )) && ! is_open "$id" && { extra+="  ${D}${nl} link$([[ $nl != 1 ]] && echo s)${R}"; plain+="  ${nl} links"; }; (( openc > 0 )) && { extra+="  ${D}${openc} open${R}"; plain+="  ${openc} open"; }; [[ -n "$blocked" ]] && { extra+="  ${Y}blocked: ${blocked}${R}"; plain+="  blocked: ${blocked}"; }
         line=${line:0:$((cols-1-${#plain}))}   # clip before any colour codes go in, so the highlight never eats into the text
         (( n == sel && lsel < 0 )) && line="${line:0:2}${INV}${line:2:30}${R}${line:32}"   # the focus is one highlighted thing: the title, or a link
         frame+="${line}${extra}"$'\n'
@@ -238,7 +243,7 @@ cmd_top() {
           i=$((i+1))
         done
         counts+=("$i")
-        (( i > 0 )) && frame+="$row"$'\n'
+        (( i > 0 )) && is_open "$id" && frame+="$row"$'\n'
         n=$((n+1))
       done <<<"$section"
       frame+=$'\n'
@@ -246,7 +251,7 @@ cmd_top() {
     (( n == 0 )) && frame+="${D}Nothing on the board. Sessions add threads with \`board set\`.${R}"$'\n'
     (( sel >= n && n > 0 )) && sel=$((n-1))
     local nlinks=${counts[$sel]:-0}; (( lsel >= nlinks )) && lsel=$((nlinks-1))
-    frame+="${D}[↑/↓] thread  [Tab] next link  [Enter] open link or resume  [o] all links  [r] resolve  [q] quit   $(date +%H:%M:%S)${R}"
+    frame+="${D}[↑/↓] thread  [e] show/hide links  [Tab] next link  [Enter] open link or resume  [o] all links  [r] resolve  [q] quit   $(date +%H:%M:%S)${R}"
     printf '\033[H\033[2J%s\n' "$frame"
     IFS= read -rsn1 -t 3 key || continue
     if [[ "$key" == $'\x1b' ]]; then  # arrows arrive as ESC [ A/B, Shift+Tab as ESC [ Z
@@ -257,8 +262,9 @@ cmd_top() {
       q) exit 0 ;;
       j) (( sel < n-1 )) && { sel=$((sel+1)); lsel=-1; } ;;
       k) (( sel > 0 )) && { sel=$((sel-1)); lsel=-1; } ;;
-      $'\t') if (( lsel < nlinks-1 )); then lsel=$((lsel+1)); elif (( sel < n-1 )); then sel=$((sel+1)); lsel=-1; fi ;;
-      B) if (( lsel >= 0 )); then lsel=$((lsel-1)); elif (( sel > 0 )); then sel=$((sel-1)); lsel=$(( ${counts[$sel]:-0} - 1 )); fi ;;
+      e) [[ -n "${ids[$sel]:-}" ]] && { if is_open "${ids[$sel]}"; then hide "${ids[$sel]}"; lsel=-1; else show "${ids[$sel]}"; fi; } ;;
+      $'\t') if (( lsel < nlinks-1 )); then lsel=$((lsel+1)); show "${ids[$sel]}"; elif (( sel < n-1 )); then sel=$((sel+1)); lsel=-1; fi ;;   # Tab into a collapsed thread opens its links
+      B) if (( lsel >= 0 )); then lsel=$((lsel-1)); elif (( sel > 0 )); then sel=$((sel-1)); lsel=$(( ${counts[$sel]:-0} - 1 )); (( lsel >= 0 )) && show "${ids[$sel]}"; fi ;;
       o) [[ -n "${ids[$sel]:-}" ]] && cmd_open "${ids[$sel]}" ;;
       r) [[ -n "${ids[$sel]:-}" ]] && cmd_resolve "${ids[$sel]}" >/dev/null ;;
       "")
