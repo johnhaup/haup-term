@@ -238,7 +238,8 @@ cmd_top() {
   hide() { expanded=${expanded/ $1 / }; }
   local B=$'\033[1m' D=$'\033[2m' R=$'\033[0m' Y=$'\033[33m' G=$'\033[32m' C=$'\033[36m' M=$'\033[35m' INV=$'\033[7m'
   local opener=open; command -v xdg-open >/dev/null && opener=xdg-open
-  tput civis 2>/dev/null; trap 'tput cnorm 2>/dev/null; printf "\033[0m\n"; exit 0' INT TERM EXIT
+  tput civis 2>/dev/null; trap 'tput cnorm 2>/dev/null; printf "\033[0m\033]0;\007\n"; exit 0' INT TERM EXIT
+  printf '\033]0;board\007'   # terminal title, which WezTerm shows on the tab; cleared on exit
   while :; do
     ids=(); urls=(); counts=(); frame=""
     local data; data=$(rows)
