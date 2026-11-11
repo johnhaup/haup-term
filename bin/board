@@ -219,8 +219,8 @@ cmd_top() {
   while :; do
     ids=(); urls=(); counts=(); frame=""
     local data; data=$(rows)
-    local cols; cols=$(tput cols 2>/dev/null || echo 120)
-    local tw; tw=$(awk -F"$US" 'length($3)>m{m=length($3)} END{print (m<20?20:(m>44?44:m))}' <<<"$data")   # title column: as wide as the longest title, 20 to 44
+    local cols; cols=$(stty size </dev/tty 2>/dev/null | awk '{print $2}'); [[ "$cols" =~ ^[0-9]+$ && "$cols" -gt 0 ]] || cols=$(tput cols 2>/dev/null || echo 120)
+    local tw; tw=$(awk -F"$US" -v max=$((cols / 2)) 'length($3)>m{m=length($3)} END{print (m<20?20:(m>max?max:m))}' <<<"$data")   # title column: as wide as the longest title, up to half the pane
     local n=0
     for b in waiting flight open done; do
       local title color
