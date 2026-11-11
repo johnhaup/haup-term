@@ -113,15 +113,17 @@ cmd_hook() {
   [[ "$session" =~ ^[A-Za-z0-9-]+$ ]] || exit 0
   [[ -d "$cwd" ]] || cwd=$(pwd -P)
   repo=$(repo_of "$cwd")
+  # The hook's parent is the claude process; remember it and its terminal so `resume` can tell an open session from a closed one
+  local where='.pid = ($pid|tonumber) | .tty = $tty'; local -a wargs=(--arg pid "$PPID" --arg tty "$(ps -o tty= -p "$PPID" 2>/dev/null | tr -d ' ')")
   case "$event" in
     SessionStart) cmd_context "$repo"; exit 0 ;;
     UserPromptSubmit)
       id=$(thread_for_session "$session" "$repo")
-      [[ -f "$(thread_file "$id")" ]] && update "$id" '.working = true | (if .status == "waiting" then .status = "open" else . end) | .sessions = (.sessions + [$s] | unique) | .last_session = $s' --arg s "$session" ;;
+      [[ -f "$(thread_file "$id")" ]] && update "$id" "$where"' | .working = true | (if .status == "waiting" then .status = "open" else . end) | .sessions = (.sessions + [$s] | unique) | .last_session = $s' --arg s "$session" "${wargs[@]}" ;;
     PreToolUse)
       [[ "$(jq -r '.tool_name // empty' <<<"$input")" == AskUserQuestion ]] || exit 0
       id=$(thread_for_session "$session" "$repo")
-      [[ -f "$(thread_file "$id")" ]] && update "$id" '.status = "waiting" | .working = false' ;;
+      [[ -f "$(thread_file "$id")" ]] && update "$id" "$where"' | .status = "waiting" | .working = false' "${wargs[@]}" ;;
     Stop)
       transcript=$(jq -r '.transcript_path // empty' <<<"$input")
       id=$(thread_for_session "$session" "$repo")
@@ -132,11 +134,11 @@ cmd_hook() {
       local found='[]' ref
       while read -r ref; do [[ -n "$ref" ]] && found=$(jq -c --argjson n "$(link_json "$ref" "$repo")" '. + [$n]' <<<"$found"); done < <(
         { grep -oE 'https?://[^ )>"\`]+' <<<"$text"; grep -oE '\b[A-Z][A-Z0-9]{1,9}-[0-9]+\b' <<<"$text"; } 2>/dev/null | sort -u | head -12)
-      update "$id" '
-          .working = false | .last_message = ($text | .[0:400]) | .sessions = (.sessions + [$s] | unique) | .last_session = $s | .cwd = $cwd
+      update "$id" "$where"'
+          | .working = false | .last_message = ($text | .[0:400]) | .sessions = (.sessions + [$s] | unique) | .last_session = $s | .cwd = $cwd
           | (if $waiting == "true" and .status != "done" then .status = "waiting" elif .status == "waiting" then .status = "open" else . end)
           | .links = (.links + ($found | map(select(.kind != "note"))) | unique_by(.ref))
-        ' --arg text "$text" --arg s "$session" --arg cwd "$cwd" --arg waiting "$waiting" --argjson found "$found" ;;
+        ' --arg text "$text" --arg s "$session" --arg cwd "$cwd" --arg waiting "$waiting" --argjson found "$found" "${wargs[@]}" ;;
   esac
   exit 0
 }
@@ -192,7 +194,14 @@ cmd_open() {
 }
 cmd_resume() {
   local f; f=$(thread_file "${1:-}"); [[ -f "$f" ]] || { echo "board: no thread ${1:-}" >&2; return 1; }
-  local cwd sid; cwd=$(jq -r '.cwd // .repo' "$f"); sid=$(jq -r '.last_session // ""' "$f")
+  local cwd sid pid tty; cwd=$(jq -r '.cwd // .repo' "$f"); sid=$(jq -r '.last_session // ""' "$f"); pid=$(jq -r '.pid // ""' "$f"); tty=$(jq -r '.tty // ""' "$f")
+  if [[ -n "$pid" ]] && [[ "$(ps -o comm= -p "$pid" 2>/dev/null)" == claude ]]; then
+    # still open: jump to its WezTerm pane when we can find it by terminal, else say where it is
+    local wez pane; wez=$(command -v wezterm || ls /Applications/WezTerm.app/Contents/MacOS/wezterm 2>/dev/null)
+    pane=$([[ -n "$wez" && -n "$tty" ]] && "$wez" cli list --format json 2>/dev/null | jq -r --arg t "/dev/$tty" '.[] | select(.tty_name == $t) | .pane_id' | head -1)
+    if [[ -n "$pane" ]]; then "$wez" cli activate-pane --pane-id "$pane" && echo "board: ${1} is open, switched to its pane"; else echo "board: ${1} is already open in another terminal${tty:+ ($tty)}"; fi
+    return 0
+  fi
   cd "$cwd" || return 1
   if [[ -n "$sid" ]]; then exec claude --resume "$sid"; else exec claude; fi
 }
@@ -226,9 +235,13 @@ cmd_top() {
     done
     (( n == 0 )) && frame+="${D}Nothing on the board. Sessions add threads with \`board set\`.${R}"$'\n'
     (( sel >= n && n > 0 )) && sel=$((n-1))
-    frame+="${D}[j/k] move  [Enter] resume  [o] open links  [r] resolve  [q] quit   $(date +%H:%M:%S)${R}"
+    frame+="${D}[↑/↓ or j/k] move  [Enter] resume  [o] open links  [r] resolve  [q] quit   $(date +%H:%M:%S)${R}"
     printf '\033[H\033[2J%s\n' "$frame"
     IFS= read -rsn1 -t 3 key || continue
+    if [[ "$key" == $'\x1b' ]]; then  # arrow keys arrive as ESC [ A/B; fold them onto k/j
+      local seq; IFS= read -rsn2 -t 0.05 seq || seq=""
+      case "$seq" in '[A') key=k ;; '[B') key=j ;; *) continue ;; esac
+    fi
     case "$key" in
       q) exit 0 ;;
       j) (( sel < n-1 )) && sel=$((sel+1)) ;;
