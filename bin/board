@@ -238,7 +238,9 @@ cmd_top() {
           done
           (( n == sel )) && nlinks=$i
           frame+="$row"$'\n'
-        elif (( n == sel )); then nlinks=0; fi
+        else
+          frame+="    ${D}↳ no links${R}"$'\n'; (( n == sel )) && nlinks=0
+        fi
         n=$((n+1))
       done <<<"$section"
       frame+=$'\n'
