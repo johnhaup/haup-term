@@ -5,7 +5,10 @@
 # changes nothing. A thread leaves the board when you resolve it or a session reports it done.
 #
 #   board set [--thread <id>] [--title <t>] [--doing <one line>] [--open <item>]... [--blocked <why>]
-#             [--link <url|TICKET-123|#pr>]... [--done]      update a thread (default thread: the repo you are in)
+#             [--link <url|TICKET-123|#pr>]... [--note <file|->] [--done]
+#                                                             update a thread (default thread: the repo you are in).
+#                                                             --note replaces the thread's living note (decisions, ruled out,
+#                                                             next step; max 25 lines), which every new session in the repo reads
 #   board add                                                 prompts for a new thread (also `a` in the view)
 #   board resolve|reopen <thread>                             mark done, or bring back
 #   board list                                                every open thread, one per line
@@ -57,7 +60,7 @@ link_json() {
 }
 
 cmd_set() {
-  local repo cwd id="" title="" doing="" blocked="" done="" ; local -a opens=() links=()
+  local repo cwd id="" title="" doing="" blocked="" done="" note="" hasnote="" ; local -a opens=() links=()
   cwd=$(pwd -P); repo=$(repo_of "$cwd")
   while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -68,10 +71,12 @@ cmd_set() {
       --blocked) blocked=$2; shift 2 ;;
       --link) links+=("$2"); shift 2 ;;
       --done) done=1; shift ;;
+      --note) hasnote=1; if [[ "$2" == - ]]; then note=$(cat); else note=$(cat "$2") || return 1; fi; shift 2 ;;
       *) echo "board set: unknown option $1" >&2; return 2 ;;
     esac
   done
   [[ -n "$id" ]] || id=$(slug "$(basename "$repo")")
+  if [[ -n "$hasnote" ]] && (( $(printf '%s\n' "$note" | wc -l) > 25 )); then echo "board set: a note is at most 25 lines; keep what a fresh session needs" >&2; return 2; fi
   local linkjson='[]'; for l in "${links[@]+"${links[@]}"}"; do linkjson=$(jq -c --argjson n "$(link_json "$l" "$repo")" '. + [$n]' <<<"$linkjson"); done
   local openjson; openjson=$(printf '%s\n' "${opens[@]+"${opens[@]}"}" | jq -R . | jq -s 'map(select(length>0))')
   update "$id" '
@@ -80,12 +85,13 @@ cmd_set() {
       | .title //= $id
       | (if $doing != "" then .doing = $doing else . end)
       | (if ($opens|length) > 0 then .open = $opens else . end)
+      | (if $hasnote == "1" then .note = $note | .note_at = $now else . end)
       | (if $blocked != "" then .blocked = $blocked elif $doing != "" then .blocked = "" else . end)
       | .links = (.links + $links | unique_by(.ref))
       | (if $done == "1" then .status = "done" | .done_at = $now | .open = [] | .blocked = "" else (if .status == "done" then .status = "open" | .done_at = null else . end) end)
       | (if $session != "" then .sessions = (.sessions + [$session] | unique) | .last_session = $session else . end)
     ' --arg repo "$repo" --arg cwd "$cwd" --arg branch "$(branch_of "$cwd")" --arg title "$title" --arg doing "$doing" \
-      --argjson opens "$openjson" --arg blocked "$blocked" --argjson links "$linkjson" --arg done "${done:-}" --arg session "${CLAUDE_CODE_SESSION_ID:-}" \
+      --argjson opens "$openjson" --arg blocked "$blocked" --argjson links "$linkjson" --arg done "${done:-}" --arg hasnote "$hasnote" --arg note "$note" --arg session "${CLAUDE_CODE_SESSION_ID:-}" \
     && echo "board: $id updated"
 }
 
@@ -201,7 +207,8 @@ cmd_context() {
   all_threads | jq -r --arg repo "$repo" '
     map(select(.repo == $repo and .status != "done")) | if length == 0 then empty else
     "Open threads on the board for this repo (update with `board set`, close with `board set --done`):",
-    (.[] | "- \(.id): \(.title). \(.doing // "")" + (if (.open|length)>0 then " Open: " + (.open|join("; ")) else "" end) + (if (.blocked//"")!="" then " Blocked: " + .blocked else "" end) + (if (.links|length)>0 then " Links: " + (.links|map(.ref)|join(", ")) else "" end)) end'
+    (.[] | "- \(.id): \(.title). \(.doing // "")" + (if (.open|length)>0 then " Open: " + (.open|join("; ")) else "" end) + (if (.blocked//"")!="" then " Blocked: " + .blocked else "" end) + (if (.links|length)>0 then " Links: " + (.links|map(.ref)|join(", ")) else "" end)
+       + (if (.note//"") != "" then "\n  Note (\(.note_at // .updated)):\n" + (.note | split("\n") | map("    " + .) | join("\n")) else "" end)) end'
 }
 cmd_open() {
   local f; f=$(thread_file "${1:-}"); [[ -f "$f" ]] || { echo "board: no thread ${1:-}" >&2; return 1; }
