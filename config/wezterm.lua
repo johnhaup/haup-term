@@ -24,14 +24,9 @@ local dracula = {
 config.unix_domains = { { name = "unix" } }
 config.default_gui_startup_args = { "connect", "unix" }
 
--- Close windows, tabs and panes without asking. The tab × button only skips the prompt
--- for programs in this list, so it names the usual ones beyond the shells.
+-- Closing a window, quitting and Cmd+W never ask. The tab × button always asks: tabs live
+-- in the mux server above, and WezTerm treats those as unsafe to close without a prompt.
 config.window_close_confirmation = "NeverPrompt"
-config.skip_close_confirmation_for_processes_named = {
-  "zsh", "bash", "fish", "sh", "tmux", "ssh", "mosh-client", "claude", "node", "bun",
-  "python", "python3", "nvim", "vim", "less", "man", "lazygit", "yazi", "htop", "top",
-  "btop", "gh", "git", "make",
-}
 
 -- Fancy tab bar for its × close buttons, in Dracula colors
 config.use_fancy_tab_bar = true
