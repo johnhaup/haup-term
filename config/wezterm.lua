@@ -99,6 +99,24 @@ table.insert(config.hyperlink_rules, {
   format = "file://$1",
 })
 
+-- claude-ticket://HAU-355?app=gym-notebook links (pipetop's STUCK list) open a new tab in that
+-- app's repo with a Claude session about the ticket.
+wezterm.on("open-uri", function(window, pane, uri)
+  local ticket, app = uri:match("^claude%-ticket://([A-Z]+%-%d+)%?app=([a-z0-9-]+)$")
+  if not ticket then
+    return -- any other link: WezTerm's default handling
+  end
+  local prompt = "Let's discuss this ticket: " .. ticket
+  window:perform_action(
+    act.SpawnCommandInNewTab({
+      cwd = wezterm.home_dir .. "/Projects/" .. app,
+      args = { os.getenv("SHELL") or "/bin/zsh", "-lic", "claude " .. wezterm.shell_quote_arg(prompt) },
+    }),
+    pane
+  )
+  return false
+end)
+
 -- Split/pane keys mirror Ghostty's defaults per OS (these add to WezTerm's defaults)
 local is_mac = wezterm.target_triple:find("darwin") ~= nil
 
