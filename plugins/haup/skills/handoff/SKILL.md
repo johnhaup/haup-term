@@ -28,7 +28,7 @@ The reader is an agent with no memory of this session, the same tools, and the s
    - **Where things are.** Absolute paths for repos and worktrees, the branch, PR and ticket links, and the harness or spec paths.
    - **Done and verified.** What is finished, and how it was verified (tests, typecheck, device run). Mark anything unverified as unverified.
    - **Next step.** The single next action, specific enough to start without asking.
-   - **Model.** The model ID the next session should run, such as `claude-opus-5-5`. Default to the model this session runs on. Pick a different one only when the next step clearly calls for it (for example a mechanical follow-up that a smaller model handles), and give the reason in a few words.
+   - **Model.** The model ID and effort level the next session should run, such as `claude-opus-5-5` at `high`. Default to the model and effort this session runs on. Pick different ones only when the next step clearly calls for it (for example a mechanical follow-up that a smaller model at low effort handles), and give the reason in a few words.
    - **Open items.** Remaining work and questions waiting on the user, in order.
    - **Rules learned this session.** Corrections and preferences the user gave that are not already in CLAUDE.md or memory, for example "mute the mic in automated streams" or "ask before pushing".
    - **Traps.** Things that cost time and will again, for example "Maestro CLI can't drive a real iPhone, use `--phone`" or "revert `types.ts` after codegen".
@@ -42,7 +42,7 @@ The reader is an agent with no memory of this session, the same tools, and the s
 
 3. **Write the prompt** in the shape below. Use plain sentences and short bullets. Write it in the second person, addressed to the agent.
 4. **Hand it over.** Print the prompt in one fenced block so it can be copied. Also write it to `~/.claude/handoffs/<yyyy-mm-dd>-<slug>.md` and give that path. If the user asks, copy it to the clipboard (`pbcopy < <file>` on macOS).
-5. **Launch it,** unless `--no-launch` was passed. Run `claude-continue --model <model> <handoff file> <primary working directory>`, where the directory is the repo or worktree named first under **Where**. It opens a WezTerm tab there, names the tab after the file, and starts `claude` with the handoff as its first prompt. If `wezterm` or `claude-continue` is missing, or `$WEZTERM_PANE` is unset, skip this step and say so.
+5. **Launch it,** unless `--no-launch` was passed. Run `claude-continue --model <model> --effort <effort> <handoff file> <primary working directory>`, where the directory is the repo or worktree named first under **Where**. It opens a WezTerm tab there, names the tab after the file, and starts `claude` with the handoff as its first prompt. If `wezterm` or `claude-continue` is missing, or `$WEZTERM_PANE` is unset, skip this step and say so.
 6. If an item on the board changed, run `board set` with the open items, so the board and the handoff agree.
 
 ## Shape
@@ -58,7 +58,7 @@ Continue <goal, one line>.
 
 **Next:** <the one next action>
 
-**Model:** `<model id>` <reason, only if it differs from this session>
+**Model:** `<model id>` at `<effort>` <reason, only if it differs from this session>
 
 **Open:**
 
