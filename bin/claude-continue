@@ -1,0 +1,32 @@
+#!/bin/bash
+set -euo pipefail
+
+usage() {
+  echo "Usage: claude-continue [--model <model>] <handoff.md> [project-dir]"
+  echo "Opens a WezTerm tab in project-dir (default: current directory) and starts Claude Code with the handoff as its first prompt."
+  exit 1
+}
+
+MODEL=""
+if [[ "${1:-}" == "--model" ]]; then
+  [[ $# -ge 2 ]] || usage
+  MODEL="$2"
+  shift 2
+fi
+
+[[ $# -ge 1 && -f "$1" ]] || usage
+command -v wezterm >/dev/null || { echo "wezterm is not on PATH"; exit 1; }
+
+HANDOFF="$(cd "$(dirname "$1")" && pwd)/$(basename "$1")"
+PROJECT="$(cd "${2:-.}" && pwd)"
+TITLE="$(basename "$HANDOFF" .md)"
+
+PANE_ID="$(wezterm cli spawn --cwd "$PROJECT" -- zsh -lic '
+  unset ${(k)parameters[(I)CLAUDE*]}
+  if [[ -n $2 ]]; then claude --model "$2" "$(cat "$1")"; else claude "$(cat "$1")"; fi
+  exec zsh -l
+' claude-continue "$HANDOFF" "$MODEL")"
+wezterm cli set-tab-title --pane-id "$PANE_ID" "$TITLE"
+wezterm cli activate-pane --pane-id "$PANE_ID"
+
+echo "Started Claude${MODEL:+ ($MODEL)} in a new tab (pane $PANE_ID) in $PROJECT with $HANDOFF"

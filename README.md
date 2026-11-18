@@ -36,6 +36,7 @@ term-refresh         # installs tools and configures your shell
 | `ad claude ["title"]` | Starts a Claude Code session in the current directory inside Agent Deck and attaches to it. The quoted string becomes the session title. Any other arguments go straight to `agent-deck` (`ad` alone opens the TUI). |
 | `board` | One view of every piece of work Claude sessions have open on this machine. `board` alone is the live view; `board set` is what sessions call. See **The board** below. |
 | `claude-handoff [dir]` | Installs the Claude Code handoff kit into a project: `docs/AGENT_CONTEXT.md` (loaded every session), an archive for pruned entries, and a Stop hook that blocks ending a turn that changed code without updating the doc. Idempotent. |
+| `claude-continue [--model <m>] <handoff.md> [dir]` | Opens a WezTerm tab in `dir`, names it after the handoff file, and starts Claude Code with the handoff as its first prompt. Used by the `handoff` skill. |
 
 ## What `term-refresh` installs
 
@@ -87,6 +88,7 @@ term-refresh         # installs tools and configures your shell
 | `done-check` | Runs the project's own type check, lint and tests and reports results before work is called done |
 | `verify-ui` | Builds and looks at a UI change on a dedicated simulator, emulator or browser |
 | `init-repo` | Writes a short CLAUDE.md for a repo that has none |
+| `handoff` | Writes a short prompt a fresh session can pick the work up from and opens it in a new WezTerm tab via `claude-continue` |
 
 Rules: `git.md`, `wrong-tab.md` and `board.md` always load; `react-native.md` and `expo.md` load only when Claude works on matching files.
 
