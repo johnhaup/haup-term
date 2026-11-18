@@ -41,7 +41,7 @@ The reader is an agent with no memory of this session, the same tools, and the s
    - Anything already in CLAUDE.md or memory. Link to it instead of repeating it.
 
 3. **Write the prompt** in the shape below. Use plain sentences and short bullets. Write it in the second person, addressed to the agent.
-4. **Hand it over.** Print the prompt in one fenced block so it can be copied. Also write it to `~/.claude/handoffs/<yyyy-mm-dd>-<slug>.md` and give that path. If the user asks, copy it with the `clip` skill.
+4. **Hand it over.** Print the prompt in one fenced block so it can be copied. Also write it to `~/.claude/handoffs/<yyyy-mm-dd>-<slug>.md` and give that path. Also copy it to the clipboard (`pbcopy < <file>` on macOS).
 5. **Launch it,** unless `--no-launch` was passed. Run `claude-continue --model <model> <handoff file> <primary working directory>`, where the directory is the repo or worktree named first under **Where**. It opens a WezTerm tab there, names the tab after the file, and starts `claude` with the handoff as its first prompt. If `wezterm` or `claude-continue` is missing, or `$WEZTERM_PANE` is unset, skip this step and say so.
 6. If an item on the board changed, run `board set` with the open items, so the board and the handoff agree.
 
