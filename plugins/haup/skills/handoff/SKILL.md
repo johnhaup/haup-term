@@ -28,7 +28,11 @@ The reader is an agent with no memory of this session, the same tools, and the s
    - **Where things are.** Absolute paths for repos and worktrees, the branch, PR and ticket links, and the harness or spec paths.
    - **Done and verified.** What is finished, and how it was verified (tests, typecheck, device run). Mark anything unverified as unverified.
    - **Next step.** The single next action, specific enough to start without asking.
-   - **Model.** The model ID and effort level the next session should run, such as `claude-opus-5-5` at `high`. Default to the model and effort this session runs on. Pick different ones only when the next step clearly calls for it (for example a mechanical follow-up that a smaller model at low effort handles), and give the reason in a few words.
+   - **Model.** Pick the model and effort the next session starts on from what the **Next** step needs, not from what this session runs on, and give the reason in a few words. Aliases (`opus`, `sonnet`, `haiku`, `opusplan`) or full model IDs both work. Never `max`.
+     - `opus` at `xhigh`: an investigation with no known cause, cross-repo work, architecture, or a fix that has failed twice.
+     - `opusplan` at `high`: work that needs a plan before it is built.
+     - `sonnet` at `high`: implementation against a clear plan or spec.
+     - `sonnet` at `medium` or `haiku` at `low`: mechanical follow-ups (lookups, renames, ticket edits).
    - **Open items.** Remaining work and questions waiting on the user, in order.
    - **Rules learned this session.** Corrections and preferences the user gave that are not already in CLAUDE.md or memory, for example "mute the mic in automated streams" or "ask before pushing".
    - **Traps.** Things that cost time and will again, for example "Maestro CLI can't drive a real iPhone, use `--phone`" or "revert `types.ts` after codegen".
@@ -58,7 +62,7 @@ Continue <goal, one line>.
 
 **Next:** <the one next action>
 
-**Model:** `<model id>` at `<effort>` <reason, only if it differs from this session>
+**Model:** `<alias or id>` at `<effort>`: <reason, a few words>
 
 **Open:**
 
