@@ -37,6 +37,7 @@ term-refresh         # installs tools and configures your shell
 | `board` | One view of every piece of work Claude sessions have open on this machine. `board` alone is the live view; `board set` is what sessions call. See **The board** below. |
 | `claude-handoff [dir]` | Installs the Claude Code handoff kit into a project: `docs/AGENT_CONTEXT.md` (loaded every session), an archive for pruned entries, and a Stop hook that blocks ending a turn that changed code without updating the doc. Idempotent. |
 | `claude-continue [--model <m>] [--effort <e>] <handoff.md> [dir]` | Opens a WezTerm tab in `dir`, names it after the handoff file, and starts Claude Code with the handoff as its first prompt, clearing the calling session's `CLAUDE*` variables so the new session saves its transcript. Used by the `handoff` skill. |
+| `gcp-android-signin [app-dir] [--testing <email>] [--print]` | Prints the Google Cloud console steps that let an Android app sign in with Google and use Drive (`drive.appdata` by default), filled in with the app's name, package, debug and upload SHA-1s, support email and privacy policy, read from `app.json`, `android/`, `credentials.json` and `ship.config.json`. In a terminal it pages one step at a time. Used by the `gcp-android-signin` skill. |
 
 ## What `term-refresh` installs
 
@@ -89,6 +90,7 @@ term-refresh         # installs tools and configures your shell
 | `verify-ui` | Builds and looks at a UI change on a dedicated simulator, emulator or browser |
 | `init-repo` | Writes a short CLAUDE.md for a repo that has none |
 | `handoff` | Writes a short prompt a fresh session can pick the work up from and opens it in a new WezTerm tab via `claude-continue` |
+| `gcp-android-signin` | Walks you through the Google Cloud setup for Android Google sign-in and Drive sync, one step at a time, using the script of the same name |
 
 Rules: `git.md`, `wrong-tab.md` and `board.md` always load; `react-native.md` and `expo.md` load only when Claude works on matching files.
 

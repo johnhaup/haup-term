@@ -1,0 +1,212 @@
+#!/usr/bin/env bash
+# gcp-android-signin: the Google Cloud console steps that let an Android app sign in with Google
+# and use a Drive scope (default drive.appdata, the app's hidden Drive folder), filled in for one app.
+#
+#   gcp-android-signin [app-dir] [options]
+#
+# Reads what it can from the app and prints every step with the values already in place:
+#   name, package      app.json (expo.name, expo.android.package) or android/app/build.gradle
+#   debug SHA-1        android/app/debug.keystore, else the Expo/RN template key, else ~/.android/debug.keystore
+#   upload SHA-1       credentials.json (android.keystore) through keytool
+#   email, home page,  ship.config.json (review.email or googlePlay.contactEmail,
+#   privacy policy     listing.marketingUrl, listing.privacyUrl)
+#
+# Options (each overrides what was read):
+#   --name <n> --package <p> --email <e> --home <url> --privacy <url>
+#   --debug-sha1 <s> --upload-sha1 <s>
+#   --scope <s>          default drive.appdata (non-sensitive: no Google review)
+#   --testing <email>    stay in Testing with this test user, and skip the Play signing client
+#                        (for example apps that never ship); default is to publish
+#   --print              print every step at once (the default when stdout is not a terminal)
+#
+# In a terminal it shows one step at a time: Enter for the next, b for back, q to quit.
+
+set -euo pipefail
+
+die() { echo "gcp-android-signin: $*" >&2; exit 1; }
+usage() { sed -n '2,/^$/s/^# \{0,1\}//p' "$0"; exit "${1:-0}"; }
+command -v jq >/dev/null || die "needs jq"
+
+DIR=. NAME= PKG= EMAIL= HOME_URL= PRIVACY= DEBUG_SHA1= UPLOAD_SHA1= SCOPE=drive.appdata TEST_USER= PRINT=
+[[ -t 1 ]] || PRINT=1
+while [[ $# -gt 0 ]]; do
+  case $1 in
+    -h|--help) usage ;;
+    --name) NAME=$2; shift 2 ;;
+    --package) PKG=$2; shift 2 ;;
+    --email) EMAIL=$2; shift 2 ;;
+    --home) HOME_URL=$2; shift 2 ;;
+    --privacy) PRIVACY=$2; shift 2 ;;
+    --debug-sha1) DEBUG_SHA1=$2; shift 2 ;;
+    --upload-sha1) UPLOAD_SHA1=$2; shift 2 ;;
+    --scope) SCOPE=$2; shift 2 ;;
+    --testing) TEST_USER=$2; shift 2 ;;
+    --print) PRINT=1; shift ;;
+    -*) echo "unknown option $1" >&2; usage 1 ;;
+    *) DIR=$1; shift ;;
+  esac
+done
+cd "$DIR" || die "no such directory: $DIR"
+
+json() { [[ -f $1 ]] && jq -r "$2 // empty" "$1" 2>/dev/null || true; }
+sha1_of() { # keystore password [alias]
+  keytool -list -v -keystore "$1" -storepass "$2" ${3:+-alias "$3"} 2>/dev/null | awk '/SHA1:/ {print $2; exit}'
+}
+
+# Expo / React Native template debug key: every prebuild copies it to android/app/debug.keystore.
+RN_DEBUG_SHA1=5E:8F:16:06:2E:A3:CD:2C:4A:0D:54:78:76:BA:A6:F3:8C:AB:F6:25
+
+[[ -n $NAME ]] || NAME=$(json app.json .expo.name)
+[[ -n $PKG ]] || PKG=$(json app.json .expo.android.package)
+[[ -n $PKG || ! -f android/app/build.gradle ]] || PKG=$(sed -nE 's/.*applicationId[ =]+"([^"]+)".*/\1/p' android/app/build.gradle | head -1)
+[[ -n $EMAIL ]] || EMAIL=$(json ship.config.json '.review.email // .googlePlay.contactEmail')
+[[ -n $HOME_URL ]] || HOME_URL=$(json ship.config.json .listing.marketingUrl)
+[[ -n $PRIVACY ]] || PRIVACY=$(json ship.config.json .listing.privacyUrl)
+
+DEBUG_FROM=
+if [[ -z $DEBUG_SHA1 ]]; then
+  if [[ -f android/app/debug.keystore ]]; then
+    DEBUG_SHA1=$(sha1_of android/app/debug.keystore android); DEBUG_FROM="android/app/debug.keystore"
+  elif [[ -f app.json ]]; then
+    DEBUG_SHA1=$RN_DEBUG_SHA1; DEBUG_FROM="the Expo template debug key (prebuild copies it)"
+  elif [[ -f $HOME/.android/debug.keystore ]]; then
+    DEBUG_SHA1=$(sha1_of "$HOME/.android/debug.keystore" android); DEBUG_FROM="~/.android/debug.keystore"
+  fi
+fi
+
+UPLOAD_FROM=
+if [[ -z $UPLOAD_SHA1 && -f credentials.json ]]; then
+  ks=$(json credentials.json .android.keystore.keystorePath)
+  pw=$(json credentials.json .android.keystore.keystorePassword)
+  alias=$(json credentials.json .android.keystore.keyAlias)
+  [[ -n $ks && -f $ks ]] && UPLOAD_SHA1=$(sha1_of "$ks" "$pw" "$alias") && UPLOAD_FROM="$ks"
+fi
+[[ -z $UPLOAD_SHA1 || -n $UPLOAD_FROM ]] || UPLOAD_FROM="--upload-sha1"
+
+missing=()
+[[ -n $NAME ]] || missing+=(--name)
+[[ -n $PKG ]] || missing+=(--package)
+[[ -n $EMAIL ]] || missing+=(--email)
+[[ -n $DEBUG_SHA1 ]] || missing+=(--debug-sha1)
+if [[ -z $TEST_USER ]]; then
+  [[ -n $HOME_URL ]] || missing+=(--home)
+  [[ -n $PRIVACY ]] || missing+=(--privacy)
+fi
+[[ ${#missing[@]} -eq 0 ]] || die "could not find: ${missing[*]} (pass them as options)"
+
+# Google wants the registrable domain; the last two labels covers johnhaup.com-style hosts.
+DOMAIN=$(printf '%s' "$HOME_URL" | sed -E 's#^[a-z]+://##; s#[/:].*##' | awk -F. 'NF>=2 {print $(NF-1)"."$NF}')
+
+S=()
+add() { S+=("$1"); }
+
+add "## 1. Create the project
+
+1. console.cloud.google.com: check the account at the top right is **$EMAIL**, the account the public sees.
+2. Project picker in the top bar → **New Project** → name \`$NAME\`, organization **No organization** → **Create**.
+3. Select **$NAME** in the picker. Every later step applies to whichever project the top bar shows."
+
+add "## 2. Enable the Google Drive API
+
+☰ → **APIs & Services → Library** → search **Google Drive API** (the plain one, not Activity or Labels) → **Enable**.
+
+Done when the page shows \"API Enabled\" with a **Manage** button."
+
+if [[ -n $TEST_USER ]]; then
+  add "## 3. Consent screen
+
+☰ → **Google Auth Platform** (or APIs & Services → OAuth consent screen) → **Get started**:
+- App name: \`$NAME\`
+- User support email: **$EMAIL** (shown to the public; the dropdown only offers project members and Google Groups they own)
+- Audience: **External**
+- Contact email: \`$EMAIL\`
+- Tick the agreement → **Create**.
+
+**No logo**: a logo makes Google require brand verification."
+else
+  add "## 3. Consent screen and branding
+
+☰ → **Google Auth Platform** (or APIs & Services → OAuth consent screen) → **Get started**:
+- App name: \`$NAME\`
+- User support email: **$EMAIL** (shown to the public; the dropdown only offers project members and Google Groups they own)
+- Audience: **External**
+- Contact email: \`$EMAIL\`
+- Tick the agreement → **Create**.
+
+Then **Branding** → App domain (Google will not let you publish without these):
+- Application home page: \`$HOME_URL\`
+- Application privacy policy link: \`$PRIVACY\`
+- Terms of service: leave blank.
+- Authorized domains: \`$DOMAIN\`
+- **No logo** (it makes Google require brand verification) → **Save**.
+
+The privacy policy must say what the app does with Google account data. Check it mentions the Drive sync before the feature ships."
+fi
+
+add "## 4. Add the scope
+
+**Data Access** → **Add or remove scopes** → filter \`$SCOPE\` → tick \`.../auth/$SCOPE\` → **Update** → scroll down → **Save**.
+
+Done when, after a reload, it is listed under **Your non-sensitive scopes**. If it lands under sensitive or restricted, stop: Google will review the app."
+
+if [[ -n $TEST_USER ]]; then
+  add "## 5. Audience: stay in Testing
+
+**Audience** → keep the status **Testing** → **Test users → Add users** → \`$TEST_USER\` → **Save**.
+
+Only listed test users can sign in. Agents never get that account's password: a person signs it into the emulator once."
+else
+  add "## 5. Audience: publish
+
+**Audience** → **Publish app** → **Confirm**. Done when the status reads **In production**.
+
+If the button is greyed out, the Branding links from step 3 are missing. If Google asks for verification, stop and check why: with only \`$SCOPE\` and no logo it should not."
+fi
+
+CLIENT_N=0
+client() { # name sha1 note
+  CLIENT_N=$((CLIENT_N + 1))
+  add "## 6.$CLIENT_N Android client: $1
+
+**Clients** → **Create client** → **Android**:
+- Name: \`$1\`
+- Package name: \`$PKG\`
+- SHA-1 certificate fingerprint: \`$2\`
+
+**Create**, then close the dialog; nothing needs copying back.${3:+
+
+$3}"
+}
+client Debug "$DEBUG_SHA1" "From $DEBUG_FROM. Debug builds are signed with it."
+if [[ -n $UPLOAD_SHA1 ]]; then
+  client Upload "$UPLOAD_SHA1" "From $UPLOAD_FROM. Builds you install without Play are signed with it."
+elif [[ -z $TEST_USER ]]; then
+  client Upload "<Upload key SHA-1>" "No upload keystore found here. Copy it from Play Console → the app → Test and release → App integrity → App signing → **Upload key certificate** → SHA-1."
+fi
+if [[ -z $TEST_USER ]]; then
+  client "Play signing" "<App signing key SHA-1>" "Play Console → the app → **Test and release → App integrity** → App signing **Settings** → **App signing key**, **Classical key** → copy the **SHA-1** (not SHA-256; ignore the quantum-ready beta key).${UPLOAD_SHA1:+ The Upload key SHA-1 on the same page should read \`$UPLOAD_SHA1\`.}
+**Never click Change key.** Without this client, sign-in fails for everyone who installs from the Play Store."
+fi
+
+add "## Done
+
+$NAME (\`$PKG\`) can sign in with Google and use \`$SCOPE\`. Check **Clients** lists every client above."
+
+header="# Google sign-in setup: $NAME ($PKG)"
+if [[ -n $PRINT ]]; then
+  printf '%s\n' "$header"
+  for s in "${S[@]}"; do printf '\n%s\n' "$s"; done
+  exit 0
+fi
+
+i=0 n=${#S[@]}
+while (( i < n )); do
+  clear
+  printf '%s   step %d of %d\n\n%s\n\n' "$header" $((i + 1)) "$n" "${S[$i]}"
+  read -rp "Enter next · b back · q quit " key </dev/tty || exit 0
+  case $key in
+    q) exit 0 ;;
+    b) (( i > 0 )) && i=$((i - 1)) ;;
+    *) i=$((i + 1)) ;;
+  esac
+done
