@@ -16,7 +16,8 @@
 #   board open <thread>                                       open the thread's links in the browser
 #   board resume <thread>                                     resume the thread's last Claude session in its directory
 #   board context                                             open threads for the current repo (SessionStart hook output)
-#   board ticket <PREFIX> <base url>                          where bare ticket keys open, e.g. HAU https://linear.app/haupenthal/issue/
+#   board ticket <PREFIX> <base url>                          where bare ticket keys open: the key is appended (PROJ https://x.atlassian.net/browse/),
+#                                                             or {n} takes its number (my-app https://github.com/me/my-app/issues/{n})
 #   board hook                                                Claude Code hook mode (stdin JSON); wired by `board install`
 #   board install [settings.json]                             add the hooks to ~/.claude/settings.json
 #
@@ -41,16 +42,20 @@ update() {
     | jq --arg now "$(now)" --arg id "$id" "$@" '.created //= $now | .updated = $now | '"$filter" >"$tmp" && mv "$tmp" "$f" || { rm -f "$tmp"; return 1; }
 }
 
-# Links are {kind, ref, url}. A bare key like HAU-123 opens through config.tickets[PREFIX]; "#12" is a PR in the repo.
+# Links are {kind, ref, url}. A bare key like PROJ-123 or my-app-12 opens through config.tickets[PREFIX]; "#12" is a PR in the repo.
+# A lowercase key is a ticket only when its prefix is configured (so utf-8 stays text).
 link_json() {
   local ref=$1 repo=${2:-}
   if [[ "$ref" =~ ^https?:// ]]; then
-    local kind=url; [[ "$ref" == *github.com*/pull/* ]] && kind=pr; [[ "$ref" == *linear.app* || "$ref" == *atlassian.net* ]] && kind=ticket
+    local kind=url; [[ "$ref" == *github.com*/pull/* ]] && kind=pr; [[ "$ref" == *linear.app* || "$ref" == *atlassian.net* || "$ref" == *github.com*/issues/* ]] && kind=ticket
     local r; r=$(basename "$ref"); [[ "$kind" == pr ]] && r="#$r"
+    [[ "$ref" =~ github\.com/[^/]+/([^/]+)/issues/([0-9]+) ]] && r="${BASH_REMATCH[1]}-${BASH_REMATCH[2]}"
     jq -n --arg k "$kind" --arg r "$r" --arg u "$ref" '{kind:$k, ref:$r, url:$u}'
-  elif [[ "$ref" =~ ^([A-Z][A-Z0-9]+)-[0-9]+$ ]]; then
-    local base; base=$(jq -r --arg p "${BASH_REMATCH[1]}" '.tickets[$p] // ""' "$CONF")
-    jq -n --arg r "$ref" --arg u "${base:+$base$ref}" '{kind:"ticket", ref:$r, url:$u}'
+  elif [[ "$ref" =~ ^([A-Za-z][A-Za-z0-9-]*)-([0-9]+)$ ]] && local p=${BASH_REMATCH[1]} n=${BASH_REMATCH[2]} \
+       && { [[ "$ref" =~ ^[A-Z][A-Z0-9]+-[0-9]+$ ]] || jq -e --arg p "$p" '.tickets[$p]' "$CONF" >/dev/null; }; then
+    local base; base=$(jq -r --arg p "$p" '.tickets[$p] // ""' "$CONF")
+    local u=""; [[ -n "$base" ]] && { [[ "$base" == *'{n}'* ]] && u=${base//\{n\}/$n} || u=$base$ref; }
+    jq -n --arg r "$ref" --arg u "$u" '{kind:"ticket", ref:$r, url:$u}'
   elif [[ "$ref" =~ ^#?([0-9]+)$ ]] && [[ -n "$repo" ]]; then
     local origin; origin=$(git -C "$repo" remote get-url origin 2>/dev/null | sed -E 's#^git@github.com:#https://github.com/#; s#\.git$##')
     jq -n --arg r "#${BASH_REMATCH[1]}" --arg u "${origin:+$origin/pull/${BASH_REMATCH[1]}}" '{kind:"pr", ref:$r, url:$u}'
@@ -155,7 +160,7 @@ cmd_hook() {
       local waiting=false; [[ "$(printf '%s' "$text" | tail -c 300)" == *\?* ]] && waiting=true
       local found='[]' ref
       while read -r ref; do [[ -n "$ref" ]] && found=$(jq -c --argjson n "$(link_json "$ref" "$repo")" '. + [$n]' <<<"$found"); done < <(
-        { grep -oE 'https?://[^ )>"\`]+' <<<"$text"; grep -oE '\b[A-Z][A-Z0-9]{1,9}-[0-9]+\b' <<<"$text"; } 2>/dev/null | sort -u | head -12)
+        { grep -oE 'https?://[^ )>"\`]+' <<<"$text"; grep -oE '\b[A-Z][A-Z0-9]{1,9}-[0-9]+\b|\b[a-z][a-z0-9-]*-[0-9]+\b' <<<"$text"; } 2>/dev/null | sort -u | head -12)
       update "$id" '
           .working = false | .last_message = ($text | .[0:400]) | .sessions = (.sessions + [$s] | unique) | .last_session = $s | .cwd = $cwd
           | (if $waiting == "true" and .status != "done" then .status = "waiting" elif .status == "waiting" then .status = "open" else . end)
