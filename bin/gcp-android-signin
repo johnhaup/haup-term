@@ -7,13 +7,15 @@
 # Reads what it can from the app and prints every step with the values already in place:
 #   name, package      app.json (expo.name, expo.android.package) or android/app/build.gradle
 #   debug SHA-1        android/app/debug.keystore, else the Expo/RN template key, else ~/.android/debug.keystore
-#   upload SHA-1       credentials.json (android.keystore) through keytool
+#   upload SHA-1       credentials.json (android.keystore) through keytool, in the app dir or --keys
 #   email, home page,  ship.config.json (review.email or googlePlay.contactEmail,
 #   privacy policy     listing.marketingUrl, listing.privacyUrl)
 #
 # Options (each overrides what was read):
 #   --name <n> --package <p> --email <e> --home <url> --privacy <url>
 #   --debug-sha1 <s> --upload-sha1 <s>
+#   --play-sha1 <s>      the Play app signing key's SHA-1 (Play Console only shows it)
+#   --keys <dir>         where the app's credentials.json lives when it is not in the app dir
 #   --scope <s>          default drive.appdata (non-sensitive: no Google review)
 #   --testing <email>    stay in Testing with this test user, and skip the Play signing client
 #                        (for example apps that never ship); default is to publish
@@ -27,7 +29,7 @@ die() { echo "gcp-android-signin: $*" >&2; exit 1; }
 usage() { sed -n '2,/^$/s/^# \{0,1\}//p' "$0"; exit "${1:-0}"; }
 command -v jq >/dev/null || die "needs jq"
 
-DIR=. NAME= PKG= EMAIL= HOME_URL= PRIVACY= DEBUG_SHA1= UPLOAD_SHA1= SCOPE=drive.appdata TEST_USER= PRINT=
+DIR=. NAME= PKG= EMAIL= HOME_URL= PRIVACY= DEBUG_SHA1= UPLOAD_SHA1= PLAY_SHA1= KEYS= SCOPE=drive.appdata TEST_USER= PRINT=
 [[ -t 1 ]] || PRINT=1
 while [[ $# -gt 0 ]]; do
   case $1 in
@@ -39,6 +41,8 @@ while [[ $# -gt 0 ]]; do
     --privacy) PRIVACY=$2; shift 2 ;;
     --debug-sha1) DEBUG_SHA1=$2; shift 2 ;;
     --upload-sha1) UPLOAD_SHA1=$2; shift 2 ;;
+    --play-sha1) PLAY_SHA1=$2; shift 2 ;;
+    --keys) KEYS=$2; shift 2 ;;
     --scope) SCOPE=$2; shift 2 ;;
     --testing) TEST_USER=$2; shift 2 ;;
     --print) PRINT=1; shift ;;
@@ -75,12 +79,14 @@ if [[ -z $DEBUG_SHA1 ]]; then
 fi
 
 UPLOAD_FROM=
-if [[ -z $UPLOAD_SHA1 && -f credentials.json ]]; then
-  ks=$(json credentials.json .android.keystore.keystorePath)
-  pw=$(json credentials.json .android.keystore.keystorePassword)
-  alias=$(json credentials.json .android.keystore.keyAlias)
+for cdir in . ${KEYS:+"$KEYS"}; do
+  [[ -z $UPLOAD_SHA1 && -f $cdir/credentials.json ]] || continue
+  ks=$(json "$cdir/credentials.json" .android.keystore.keystorePath)
+  pw=$(json "$cdir/credentials.json" .android.keystore.keystorePassword)
+  alias=$(json "$cdir/credentials.json" .android.keystore.keyAlias)
+  [[ -n $ks && $ks != /* ]] && ks=$cdir/$ks
   [[ -n $ks && -f $ks ]] && UPLOAD_SHA1=$(sha1_of "$ks" "$pw" "$alias") && UPLOAD_FROM="$ks"
-fi
+done
 [[ -z $UPLOAD_SHA1 || -n $UPLOAD_FROM ]] || UPLOAD_FROM="--upload-sha1"
 
 missing=()
@@ -108,7 +114,7 @@ add "## 1. Create the project
 
 add "## 2. Enable the Google Drive API
 
-☰ → **APIs & Services → Library** → search **Google Drive API** (the plain one, not Activity or Labels) → **Enable**.
+☰ → **APIs & Services → Library** → search **Google Drive API** → **Enable**.
 
 Done when the page shows \"API Enabled\" with a **Manage** button."
 
@@ -184,7 +190,7 @@ elif [[ -z $TEST_USER ]]; then
   client Upload "<Upload key SHA-1>" "No upload keystore found here. Copy it from Play Console → the app → Test and release → App integrity → App signing → **Upload key certificate** → SHA-1."
 fi
 if [[ -z $TEST_USER ]]; then
-  client "Play signing" "<App signing key SHA-1>" "Play Console → the app → **Test and release → App integrity** → App signing **Settings** → **App signing key**, **Classical key** → copy the **SHA-1** (not SHA-256; ignore the quantum-ready beta key).${UPLOAD_SHA1:+ The Upload key SHA-1 on the same page should read \`$UPLOAD_SHA1\`.}
+  client "Play signing" "${PLAY_SHA1:-<App signing key SHA-1>}" "Play Console → the app → **Test and release → App integrity** → App signing **Settings** → **App signing key**, **Classical key** → copy the **SHA-1** (not SHA-256; ignore the quantum-ready beta key).${UPLOAD_SHA1:+ The Upload key SHA-1 on the same page should read \`$UPLOAD_SHA1\`.}
 **Never click Change key.** Without this client, sign-in fails for everyone who installs from the Play Store."
 fi
 

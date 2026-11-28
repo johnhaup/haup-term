@@ -12,6 +12,7 @@ This is console work only the user can do. You fill in the values and pace the s
 Run `gcp-android-signin <app-dir> --print`. It reads the name, package, debug and upload SHA-1s, support email, home page and privacy policy from the app's `app.json`, `android/`, `credentials.json` and `ship.config.json`.
 
 - If it says it could not find something, ask the user for that value only, then pass it as the option the error names.
+- Keys kept outside the repo: pass `--keys <dir>` (the folder with the app's `credentials.json`) so the upload SHA-1 is read, not asked for. Once the user pastes the Play app signing SHA-1, `--play-sha1 <sha1>` fills in that client.
 - An app that never ships (an example or test app) stays in Testing: pass `--testing <test-account-email>`. Ask which Google account they will sign into the emulator.
 - The support email is public. If the user doesn't want their personal address shown, use the app's store contact address (what the script found) and have them sign into the console with that account.
 - Several apps: do one app at a time, all steps, so the project in the top bar never changes mid-step. Do the app the test needs first.
